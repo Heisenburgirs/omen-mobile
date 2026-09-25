@@ -1,0 +1,26 @@
+node_modules/
+.expo/
+dist/
+dist-*/
+android/
+ios/
+.local/
+.env
+.env.*
+!.env.example
+*.log
+*.tsbuildinfo
+*.jks
+*.keystore
+*.p8
+*.p12
+*.pem
+.DS_Store
+
+# Local Expo module sources must be committed; generated outputs stay ignored.
+!modules/*/android/
+modules/*/android/build/
+modules/*/android/.gradle/
+
+# Codex recovery manifest from the D: drive copy; not source.
+recovery-copy.json

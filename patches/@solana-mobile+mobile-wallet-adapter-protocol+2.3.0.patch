@@ -1,0 +1,27 @@
+diff --git a/node_modules/@solana-mobile/mobile-wallet-adapter-protocol/android/src/main/java/com/solanamobile/mobilewalletadapter/reactnative/SolanaMobileWalletAdapterModule.kt b/node_modules/@solana-mobile/mobile-wallet-adapter-protocol/android/src/main/java/com/solanamobile/mobilewalletadapter/reactnative/SolanaMobileWalletAdapterModule.kt
+--- a/node_modules/@solana-mobile/mobile-wallet-adapter-protocol/android/src/main/java/com/solanamobile/mobilewalletadapter/reactnative/SolanaMobileWalletAdapterModule.kt
++++ b/node_modules/@solana-mobile/mobile-wallet-adapter-protocol/android/src/main/java/com/solanamobile/mobilewalletadapter/reactnative/SolanaMobileWalletAdapterModule.kt
+@@ -107,6 +107,11 @@
+                         localAssociation.port,
+                         localAssociation.session
+                     )
++                // Keep OMEN's wallet picker selection explicit instead of opening Android's chooser.
++                val walletPackage = if (config?.hasKey("androidWalletPackage") == true) {
++                    config.getString("androidWalletPackage")
++                } else null
++                if (!walletPackage.isNullOrBlank()) intent.setPackage(walletPackage)
+                 withContext(Dispatchers.Main) {
+                     sessionTaskId = headlessJsTaskContext.startTask(sessionBackgroundTaskConfig)
+                 }
+diff --git a/node_modules/@solana-mobile/mobile-wallet-adapter-protocol/src/codegenSpec/NativeSolanaMobileWalletAdapter.ts b/node_modules/@solana-mobile/mobile-wallet-adapter-protocol/src/codegenSpec/NativeSolanaMobileWalletAdapter.ts
+--- a/node_modules/@solana-mobile/mobile-wallet-adapter-protocol/src/codegenSpec/NativeSolanaMobileWalletAdapter.ts
++++ b/node_modules/@solana-mobile/mobile-wallet-adapter-protocol/src/codegenSpec/NativeSolanaMobileWalletAdapter.ts
+@@ -1,7 +1,7 @@
+ import { TurboModule, TurboModuleRegistry } from 'react-native';
+ 
+ export interface Spec extends TurboModule {
+-    startSession(config?: { baseUri?: string }): Promise<{
++    startSession(config?: { baseUri?: string; androidWalletPackage?: string }): Promise<{
+         protocol_version: 'legacy' | 'v1';
+     }>;
+ 

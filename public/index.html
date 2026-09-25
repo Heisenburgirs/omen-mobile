@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, shrink-to-fit=no" />
+    <title>OMEN</title>
+    <meta name="description" content="Trade Solana assets and put your dividends to work automatically." />
+    <meta name="theme-color" content="#070707" />
+    <link rel="manifest" href="/app/manifest.webmanifest" />
+    <link rel="icon" href="/app/icon-192.png" />
+    <link rel="apple-touch-icon" href="/app/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="OMEN" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="OMEN — a new orbit for trading" />
+    <meta property="og:description" content="Find signals. Trade assets. Put dividends to work. No install needed." />
+    <meta property="og:url" content="https://www.getomen.xyz/app" />
+    <meta property="og:image" content="https://www.getomen.xyz/app/og.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@getomenxyz" />
+    <meta name="twitter:image" content="https://www.getomen.xyz/app/og.png" />
+    <style id="expo-reset">
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        background: #070707;
+        overscroll-behavior: none;
+      }
+      /* The same mark, the same size, on the same black as the installed
+         app's splash before it and the app's own launch screen after it:
+         one steady picture from tap to first screen, instead of three. */
+      body {
+        background: #070707 url("/app/mark-480.png") center / 240px 240px no-repeat;
+      }
+      /* No browser focus ring on fields: the app draws its own states. */
+      input,
+      textarea,
+      [contenteditable] {
+        outline: none !important;
+        -webkit-tap-highlight-color: transparent;
+      }
+      body {
+        overflow: hidden;
+      }
+      /* The app is a phone app. On anything wider it stays phone-shaped and
+         centred rather than stretching its rows across a monitor. */
+      #root {
+        display: flex;
+        height: 100%;
+        flex: 1;
+        width: 100%;
+        max-width: 480px;
+        margin: 0 auto;
+        position: relative;
+        overflow: hidden;
+      }
+      /* Sheets and dialogs are portalled to <body>, outside #root: keep them
+         in the same phone-wide column on a wide screen. */
+      body > div:not(#root):not(#gate):not(#omen-toast) {
+        max-width: 480px;
+        left: 0 !important;
+        right: 0 !important;
+        margin: 0 auto !important;
+      }
+      /* Shown instead of the app: on a computer (it is a phone app) and inside
+         an in-app browser such as X's, where Google refuses to sign anyone in. */
+      #gate {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 10;
+        background: #070707;
+        color: #f4f4f6;
+        font: 16px/24px system-ui, -apple-system, "Segoe UI", sans-serif;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        text-align: center;
+      }
+      #gate .card { max-width: 360px; }
+      #gate h1 { font-size: 24px; line-height: 32px; margin: 0 0 8px; }
+      #gate p { color: #9a9aa3; margin: 0 0 20px; }
+      #gate img { width: 220px; height: 220px; border-radius: 16px; display: block; margin: 0 auto 20px; }
+      #gate button, #gate a.primary {
+        display: block; width: 100%; box-sizing: border-box; border: 0; border-radius: 14px;
+        padding: 14px 16px; font: 600 16px/20px inherit; cursor: pointer; text-decoration: none;
+        background: #f4f4f6; color: #070707; margin-bottom: 10px;
+      }
+      #gate button.quiet { background: transparent; color: #9a9aa3; }
+    </style>
+  </head>
+  <body>
+    <noscript>OMEN needs JavaScript to run.</noscript>
+    <div id="gate"><div class="card" id="gate-card"></div></div>
+    <div id="root"></div>
+    <script src="/app/gate.js"></script>
+  </body>
+</html>
