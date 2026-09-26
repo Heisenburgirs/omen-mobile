@@ -44,17 +44,19 @@ function decodeSignature(value: string): Uint8Array | null {
   return null;
 }
 
-export function walletSigner(
+/**
+ * Signs bytes with a Privy wallet and verifies the result. How this Privy
+ * SDK reads the `message` string (as base64 of the bytes to sign, or as the
+ * text itself) is learned from the first signature that verifies, then kept.
+ */
+export function messageSigner(
   address: string,
   getProvider: () => Promise<WalletProvider>,
-): WalletSigner {
+): (content: Uint8Array) => Promise<Uint8Array> {
   const publicKey = new Uint8Array(getBase58Encoder().encode(address));
-  // How this Privy SDK reads the `message` string: as base64 of the bytes to
-  // sign, or as the text itself. Learned from the first signature that
-  // verifies, then kept.
   let messageMode: "base64" | "text" | undefined;
-
-  async function signMessage(provider: WalletProvider, content: Uint8Array): Promise<Uint8Array> {
+  return async (content: Uint8Array) => {
+    const provider = await getProvider();
     const modes = messageMode ? [messageMode] : (["base64", "text"] as const);
     for (const mode of modes) {
       let message: string;
@@ -71,7 +73,15 @@ export function walletSigner(
       }
     }
     throw new Error("Your wallet could not sign the request.");
-  }
+  };
+}
+
+export function walletSigner(
+  address: string,
+  getProvider: () => Promise<WalletProvider>,
+): WalletSigner {
+  const publicKey = new Uint8Array(getBase58Encoder().encode(address));
+  const signMessage = messageSigner(address, getProvider);
 
   const signer = {
     address,
@@ -96,9 +106,8 @@ export function walletSigner(
       return out;
     },
     async signMessages(messages: readonly KitSignableMessage[]) {
-      const provider = await getProvider();
       const out: Record<string, Uint8Array>[] = [];
-      for (const message of messages) out.push({ [address]: await signMessage(provider, message.content) });
+      for (const message of messages) out.push({ [address]: await signMessage(message.content) });
       return out;
     },
   };

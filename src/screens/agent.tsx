@@ -19,8 +19,10 @@ import {
 } from "../theme";
 import { showToast } from "../lib/toast";
 import { mobileFetch, useMobile } from "../lib/mobile-api";
-import { usePrivy } from "../lib/privy";
+import { useEmbeddedSolanaWallet, usePrivy } from "../lib/privy";
 import { useChainActions } from "../lib/chain-actions";
+import { lockIdentity, unlockIdentity } from "../agent/identity";
+import { messageSigner, type WalletProvider } from "../agent/ryvo/wallet-signer";
 import { USDC } from "../domain/models";
 import { runTurn } from "../agent/harness";
 import type { Fetcher } from "../agent/tools";
@@ -139,9 +141,32 @@ export function AgentScreen({
   const list = useRef<ScrollView>(null);
   const localId = useRef(-1);
 
-  // The conversation so far, from the device.
+  // The agent's identity opens with one signature from the user's wallet:
+  // everything it remembers is sealed under that key on this device.
+  const embedded = useEmbeddedSolanaWallet();
+  const signerAccount = primary ? (embedded.wallets ?? []).find((w) => w.address === primary) : undefined;
+  const [identity, setIdentity] = useState<"locked" | "unlocking" | "open" | "failed">("locked");
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
-    if (!owner) return;
+    if (!owner || !signerAccount) {
+      lockIdentity();
+      setIdentity("locked");
+      return;
+    }
+    let cancelled = false;
+    setIdentity("unlocking");
+    const sign = messageSigner(owner, () => signerAccount.getProvider() as unknown as Promise<WalletProvider>);
+    unlockIdentity(owner, sign)
+      .then(() => !cancelled && setIdentity("open"))
+      .catch(() => !cancelled && setIdentity("failed"));
+    return () => {
+      cancelled = true;
+    };
+  }, [owner, signerAccount, attempt]);
+
+  // The conversation so far, from the device, once the identity is open.
+  useEffect(() => {
+    if (!owner || identity !== "open") return;
     let cancelled = false;
     listMessages(owner)
       .then((stored) => {
@@ -153,7 +178,7 @@ export function AgentScreen({
     return () => {
       cancelled = true;
     };
-  }, [owner]);
+  }, [owner, identity]);
 
   const send = useCallback(
     async (text: string) => {
@@ -162,6 +187,10 @@ export function AgentScreen({
       setDraft("");
       if (!owner) {
         showToast("Your wallet is still being prepared. Try again in a moment.");
+        return;
+      }
+      if (identity !== "open") {
+        showToast(identity === "failed" ? "Sign to unlock your agent first." : "Unlocking your agent…");
         return;
       }
       const mine = await addMessage(owner, "user", clean).catch(() => null);
@@ -199,7 +228,7 @@ export function AgentScreen({
         setTyping(false);
       }
     },
-    [typing, owner, funded, user, getAccessToken, channel.write],
+    [typing, owner, identity, funded, user, getAccessToken, channel.write],
   );
   const fresh = messages.length === 1;
 
@@ -288,7 +317,7 @@ export function AgentScreen({
       {/* The agent's own balance, and moving money in and out of it. */}
       <View style={[m.between, s.header]}>
         <View style={{ gap: 2 }}>
-          <Text style={m.label}>Agent balance</Text>
+          <Text style={m.label}>{identity === "unlocking" ? "Unlocking agent…" : "Agent balance"}</Text>
           <Text numberOfLines={1} style={s.balance}>
             {hidden ? "••••" : channel.view ? usd(balance) : "—"}
           </Text>
@@ -330,6 +359,17 @@ export function AgentScreen({
             ) : null}
           </View>
         ))}
+        {identity === "failed" ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setAttempt((n) => n + 1)}
+            style={({ pressed }) => [s.bubble, s.theirs, { opacity: pressed ? 0.6 : 1 }]}
+          >
+            <Text style={[m.text, { lineHeight: 21 }]}>
+              Your agent is sealed under your wallet's key. Tap to sign and unlock it.
+            </Text>
+          </Pressable>
+        ) : null}
         {typing ? (
           <View style={[s.bubble, s.theirs]}>
             <Text style={[m.muted, { lineHeight: 21 }]}>…</Text>
