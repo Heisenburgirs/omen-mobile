@@ -1,18 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RyvoChannelClient, type ChannelStatus } from "@ryvo/channel-client";
 import { config } from "../../config";
-import { useEmbeddedSolanaWallet, usePrivy } from "../../lib/privy";
+import { usePrivy } from "../../lib/privy";
 import type { ChatMessage } from "../harness";
 import { RYVO, fromMicro, toMicro } from "./config";
 import { channelSessionStore } from "./session-store";
 import { walletSigner, type WalletProvider } from "./wallet-signer";
 
-// The agent's balance: a USDC payment channel between the user's Privy
+// The agent's balance: a USDC payment channel between the agent's own Privy
 // wallet and Ryvo, kept on this device. Funding opens the channel (or tops
-// it up), withdrawing closes it and returns what is unspent, and every reply
-// the agent writes is prepaid from it. The channel client serialises its own
-// calls, and the gateway allows one request per channel at a time, so the
-// app never fires two turns at once.
+// it up) from USDC already in the agent's wallet, withdrawing closes it and
+// returns what is unspent to that wallet, and every reply the agent writes
+// is prepaid from it. The channel client serialises its own calls, and the
+// gateway allows one request per channel at a time, so the app never fires
+// two turns at once.
+export type ChannelPayer = { address: string | null; getProvider: () => Promise<WalletProvider> };
 export type ChannelView = {
   state: "none" | ChannelStatus["state"];
   /** What is left to spend. */
@@ -34,18 +36,17 @@ const toView = (s: ChannelStatus): ChannelView => ({
   closeDeadline: s.closeDeadline,
 });
 
-export function useRyvoChannel() {
+export function useRyvoChannel(payer: ChannelPayer) {
   const { user, getAccessToken } = usePrivy();
-  const wallet = useEmbeddedSolanaWallet();
-  const account = wallet.wallets?.[0];
-  const address = account?.address ?? null;
+  const address = payer.address;
+  const getProvider = payer.getProvider;
   const built = useRef<{ address: string; client: RyvoChannelClient; store: ReturnType<typeof channelSessionStore> } | null>(null);
   const [view, setView] = useState<ChannelView | null>(null);
   const [limits, setLimits] = useState<DepositLimits>(DEFAULT_LIMITS);
   const [busy, setBusy] = useState(false);
 
   const handles = useCallback(() => {
-    if (!account || !address) throw new Error("Your wallet is still being prepared. Try again in a moment.");
+    if (!address) throw new Error("Your agent's wallet is still being prepared. Try again in a moment.");
     if (built.current?.address === address) return built.current;
     // The channel's few RPC calls go through the site, which holds the RPC
     // key and wants the user's token; Ryvo's own endpoints get plain fetch.
@@ -62,13 +63,13 @@ export function useRyvoChannel() {
       gatewayUrl: RYVO.gatewayUrl,
       facilitatorUrl: RYVO.facilitatorUrl,
       rpcUrl: `${config.apiUrl}/api/mobile?resource=rpc`,
-      wallet: walletSigner(address, () => account.getProvider() as unknown as Promise<WalletProvider>),
+      wallet: walletSigner(address, getProvider),
       store,
       fetch: authedFetch,
     });
     built.current = { address, client, store };
     return built.current;
-  }, [account, address, user, getAccessToken]);
+  }, [address, getProvider, user, getAccessToken]);
 
   /** The channel as Ryvo sees it now; "none" when this device has no channel for the wallet. */
   const refresh = useCallback(async (): Promise<ChannelView> => {
@@ -183,5 +184,5 @@ export function useRyvoChannel() {
     [handles, refresh],
   );
 
-  return { address, ready: Boolean(account), view, limits, busy, refresh, loadLimits, fund, withdraw, write };
+  return { address, ready: Boolean(address), view, limits, busy, refresh, loadLimits, fund, withdraw, write };
 }

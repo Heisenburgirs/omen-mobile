@@ -267,12 +267,13 @@ export function useEmbeddedSolanaWallet() {
   const connected = wallets.find((w) => w.address === owned[0]?.address);
 
   const create = useCallback(
-    async (_options?: { recoveryMethod?: string; createAdditional?: boolean }) => {
+    async (options?: { recoveryMethod?: string; createAdditional?: boolean }) => {
       if (creating.current) return;
       creating.current = true;
       setPhase("creating");
       try {
-        await createWallet();
+        // A second embedded wallet (the agent's) beside the sign-up one.
+        await createWallet(options?.createAdditional ? { createAdditional: true } : undefined);
         setPhase("idle");
       } catch (cause) {
         setPhase("error");

@@ -18,13 +18,34 @@ import {
   space,
 } from "../theme";
 import { showToast } from "../lib/toast";
-import { mobileFetch } from "../lib/mobile-api";
+import { mobileFetch, useMobile } from "../lib/mobile-api";
 import { usePrivy } from "../lib/privy";
+import { useChainActions } from "../lib/chain-actions";
+import { USDC } from "../domain/models";
 import { runTurn } from "../agent/harness";
 import type { Fetcher } from "../agent/tools";
 import { addMessage, listMessages, type StoredMessage } from "../agent/store";
+import { useAgentWallet } from "../agent/agent-wallet";
 import { useRyvoChannel } from "../agent/ryvo/use-channel";
 import { fromMicro } from "../agent/ryvo/config";
+
+/** A USDC amount as the transfer API takes it: up to six decimals, no trailing zeros. */
+const usdcAmount = (n: number) => n.toFixed(6).replace(/\.?0+$/, "");
+/** Waits for a send to confirm; a transfer into the agent's wallet must land before the channel can draw on it. */
+async function waitConfirmed(signature: string, token: string | null, ms = 60000): Promise<void> {
+  const until = Date.now() + ms;
+  while (Date.now() < until) {
+    const { data } = await mobileFetch<{ status: "pending" | "confirmed" | "failed"; error?: string }>(
+      "transaction",
+      { signature },
+      token,
+    );
+    if (data.status === "confirmed") return;
+    if (data.status === "failed") throw new Error(data.error || "The transfer failed.");
+    await new Promise((r) => setTimeout(r, 1500));
+  }
+  throw new Error("The transfer is taking longer than usual. Try again in a moment.");
+}
 
 const GREETING = "What are we trading today, anon?";
 const SUGGESTIONS = [
@@ -33,7 +54,7 @@ const SUGGESTIONS = [
   "How is my portfolio doing?",
 ];
 const UNFUNDED =
-  "I run on my own balance: USDC you lock with Ryvo, spent a fraction of a cent per reply and returned when you withdraw. Tap Fund to start.";
+  "I run on my own wallet: USDC you move into it goes into a payment channel with Ryvo, is spent a fraction of a cent per reply, and comes back when you withdraw. Tap Fund to start.";
 
 type Shown = { id: number; from: "agent" | "user"; text: string; costMicro?: number | null };
 const shown = (m: StoredMessage): Shown => ({ id: m.id, from: m.role, text: m.text, costMicro: m.costMicro });
@@ -63,10 +84,24 @@ export function AgentScreen({
   cashUsd: number;
 }) {
   const { user, getAccessToken } = usePrivy();
-  const channel = useRyvoChannel();
-  const owner = channel.address;
+  const agent = useAgentWallet();
+  const channel = useRyvoChannel(agent);
+  const actions = useChainActions();
+  // The user's own wallets: the primary is where withdrawn USDC goes back
+  // to, and the key the agent's memory is filed under on this device.
+  const wallets = useMobile<{ address: string; primary: boolean }[]>("wallets", {}, Boolean(user), 60000);
+  const primary = wallets.data?.data.find((w) => w.primary)?.address ?? wallets.data?.data[0]?.address ?? null;
+  const owner = primary;
   const balance = channel.view?.availableUsdc ?? 0;
   const funded = channel.view?.state === "open";
+  // USDC in the agent's wallet but not in the channel: what a withdrawal
+  // leaves there until it is moved back, or a funding that stopped halfway.
+  const [idle, setIdle] = useState(0);
+  const idleUsdc = agent.idleUsdc;
+  const refreshIdle = useCallback(() => idleUsdc().then(setIdle).catch(() => undefined), [idleUsdc]);
+  useEffect(() => {
+    void refreshIdle();
+  }, [refreshIdle]);
 
   const [transfer, setTransfer] = useState(false);
   // Which way the money goes: into the agent, or back out to the wallet.
@@ -74,7 +109,8 @@ export function AgentScreen({
   const [amount, setAmount] = useState("");
   const value = Number(amount) || 0;
   const roomUsdc = Math.max(0, channel.limits.maxUsdc - (channel.view?.depositUsdc ?? 0));
-  const available = Math.min(cashUsd, roomUsdc);
+  // Idle USDC in the agent's wallet is used before anything leaves the user's.
+  const available = Math.min(cashUsd + idle, roomUsdc);
   const over = value > available + 1e-6;
   const under = value > 0 && value < channel.limits.minUsdc && !funded;
   // The keyboard covers the bottom of the window and nothing resizes for it
@@ -173,24 +209,76 @@ export function AgentScreen({
     setTransfer(true);
     void channel.loadLimits();
   };
+  const [moving, setMoving] = useState(false);
+  const working = channel.busy || moving;
+  /** Moves the agent wallet's idle USDC back to the user's wallet, waiting for at least `expect` to be there first. */
+  const sweep = useCallback(
+    async (expect: number) => {
+      if (!agent.address || !primary) throw new Error("Your wallet is still being prepared.");
+      let have = 0;
+      const until = Date.now() + 45000;
+      do {
+        have = await idleUsdc().catch(() => 0);
+        if (have + 0.01 >= expect && have > 0) break;
+        await new Promise((r) => setTimeout(r, 2000));
+      } while (Date.now() < until);
+      if (have <= 0) throw new Error("The agent's wallet is empty.");
+      if (have + 0.01 < expect) throw new Error("The refund hasn't landed yet. Use Move to wallet in a moment.");
+      await actions.transfer({ mint: USDC, to: primary, amount: usdcAmount(have), wallet: agent.address });
+      await refreshIdle();
+      return have;
+    },
+    [agent.address, primary, idleUsdc, actions, refreshIdle],
+  );
   const submit = async () => {
+    setMoving(true);
     try {
       if (direction === "fund") {
+        // The agent's wallet first (made now if it is the first time), then
+        // USDC from the user's wallet into it, then into the channel.
+        const address = await agent.ensure();
+        const have = await idleUsdc().catch(() => 0);
+        const need = value - have;
+        if (need > 0.000001) {
+          const token = user ? await getAccessToken() : null;
+          const signature = await actions.transfer({ mint: USDC, to: address, amount: usdcAmount(need) });
+          await waitConfirmed(signature, token);
+        }
         const next = await channel.fund(value);
+        await refreshIdle();
         setTransfer(false);
         setAmount("");
         showToast(next.state === "open" ? `Agent funded: ${usd(next.availableUsdc)} to spend` : "Funding is on its way");
       } else {
+        // Closing returns the unspent deposit to the agent's wallet; from
+        // there it goes back to the user's.
+        const refund = channel.view?.availableUsdc ?? 0;
         const next = await channel.withdraw();
+        if (next.closeDeadline) {
+          setTransfer(false);
+          showToast("Withdrawal requested; the deposit returns after Ryvo's 48-hour window");
+          return;
+        }
+        const moved = await sweep(refund);
         setTransfer(false);
-        showToast(
-          next.closeDeadline
-            ? "Withdrawal requested; the deposit returns after Ryvo's 48-hour window"
-            : "Unspent balance returned to your wallet",
-        );
+        showToast(`${usd(moved)} returned to your wallet`);
       }
     } catch (e) {
       showToast(e instanceof Error ? e.message : "That didn't go through. Try again.");
+      void refreshIdle();
+    } finally {
+      setMoving(false);
+    }
+  };
+  const moveIdle = async () => {
+    setMoving(true);
+    try {
+      const moved = await sweep(0);
+      showToast(`${usd(moved)} returned to your wallet`);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "That didn't go through. Try again.");
+    } finally {
+      setMoving(false);
     }
   };
   const label = stateLabel[channel.view?.state ?? "none"] ?? "";
@@ -204,15 +292,19 @@ export function AgentScreen({
           <Text numberOfLines={1} style={s.balance}>
             {hidden ? "••••" : channel.view ? usd(balance) : "—"}
           </Text>
-          {label ? <Text style={[m.muted, { fontSize: 12 }]}>{label}</Text> : null}
+          {label || idle > 0.005 ? (
+            <Text style={[m.muted, { fontSize: 12 }]}>
+              {[label, idle > 0.005 ? `${usd(idle)} in the agent's wallet` : ""].filter(Boolean).join(" · ")}
+            </Text>
+          ) : null}
         </View>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Fund or withdraw from the agent"
-          disabled={!channel.ready}
+          disabled={!user || !primary}
           onPress={openSheet}
           hitSlop={10}
-          style={({ pressed }) => [s.fund, { opacity: !channel.ready ? 0.4 : pressed ? 0.6 : 1 }]}
+          style={({ pressed }) => [s.fund, { opacity: !user || !primary ? 0.4 : pressed ? 0.6 : 1 }]}
         >
           <Text style={[m.link, { color: colors.ice, fontSize: 15 }]}>{funded ? "Manage" : "Fund"}</Text>
         </Pressable>
@@ -291,27 +383,34 @@ export function AgentScreen({
       {/* Money between the wallet and the agent, either way. */}
       <OmenSheet
         visible={transfer}
-        onClose={() => !channel.busy && setTransfer(false)}
+        onClose={() => !working && setTransfer(false)}
         title={direction === "fund" ? (funded ? "Add to agent" : "Fund agent") : "Withdraw from agent"}
       >
         <View style={{ gap: 16, paddingTop: 4, paddingHorizontal: 24, paddingBottom: 8 }}>
           <Text style={m.muted}>
             {direction === "fund"
-              ? `USDC locked in your agent's payment channel with Ryvo. Each reply costs a fraction of a cent from it; the rest comes back when you withdraw. ${channel.limits.minUsdc} to ${channel.limits.maxUsdc} USDC.`
-              : "Closes the channel: what your agent hasn't spent returns to your wallet, what it spent settles to Ryvo."}
+              ? `USDC moves from your wallet into your agent's own wallet and on into its payment channel with Ryvo. Each reply costs a fraction of a cent from it; the rest comes back when you withdraw. ${channel.limits.minUsdc} to ${channel.limits.maxUsdc} USDC.`
+              : "Closes the channel: what your agent hasn't spent comes back to your wallet, what it spent settles to Ryvo."}
           </Text>
+          {direction === "withdraw" && !funded && idle > 0.005 ? (
+            <Button
+              title={moving ? "Moving…" : `Move ${usd(idle)} to wallet`}
+              disabled={working}
+              onPress={() => void moveIdle()}
+            />
+          ) : null}
           <View style={s.toggle}>
             {(["fund", "withdraw"] as const).map((d) => (
               <Pressable
                 key={d}
                 accessibilityRole="button"
                 accessibilityState={{ selected: direction === d }}
-                disabled={d === "withdraw" && !funded}
+                disabled={d === "withdraw" && !funded && idle <= 0.005}
                 onPress={() => {
                   setDirection(d);
                   setAmount("");
                 }}
-                style={[s.toggleItem, direction === d && s.toggleOn, d === "withdraw" && !funded && { opacity: 0.4 }]}
+                style={[s.toggleItem, direction === d && s.toggleOn, d === "withdraw" && !funded && idle <= 0.005 && { opacity: 0.4 }]}
               >
                 <Text
                   style={[
@@ -373,7 +472,7 @@ export function AgentScreen({
           ) : null}
           <Button
             title={
-              channel.busy
+              working
                 ? direction === "fund"
                   ? "Funding…"
                   : "Withdrawing…"
@@ -389,7 +488,7 @@ export function AgentScreen({
                         : "Fund"
                   : "Withdraw"
             }
-            disabled={channel.busy || (direction === "fund" ? !value || over || under : !funded)}
+            disabled={working || (direction === "fund" ? !value || over || under : !funded)}
             onPress={() => void submit()}
           />
         </View>
