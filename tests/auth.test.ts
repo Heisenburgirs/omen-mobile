@@ -9,9 +9,9 @@ import {
   connectionErrorMessage,
 } from "../src/lib/auth";
 
-test("Android offers Google only; Seeker offers Seeker and Google", () => {
+test("Android offers Google only; a Seeker offers its Seed Vault only", () => {
   assert.deepEqual(loginProviders("android", "Pixel 7"), ["google"]);
-  assert.deepEqual(loginProviders("android", " Seeker "), ["seeker", "google"]);
+  assert.deepEqual(loginProviders("android", " Seeker "), ["seeker"]);
   assert.deepEqual(loginProviders("android", "Seeker emulator"), ["google"]);
   assert.equal(loginButtonLabel("seeker"), "Continue with Seeker");
   assert.equal(loginButtonLabel("google"), "Continue with Google");

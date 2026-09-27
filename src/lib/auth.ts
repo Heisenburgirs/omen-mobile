@@ -2,7 +2,10 @@ export type LoginProvider = "google" | "seeker" | "wallet";
 export type AuthProvider = LoginProvider | "twitter";
 
 export function loginProviders(platform: string, model?: string): readonly LoginProvider[] {
-  if (platform === "android" && model?.trim().toLowerCase() === "seeker") return ["seeker", "google"];
+  // A Seeker signs in with its Seed Vault and nothing else (2026-09-28): the
+  // phone's own key is the identity there. Every other Android goes through
+  // Privy's Google sign-in.
+  if (platform === "android" && model?.trim().toLowerCase() === "seeker") return ["seeker"];
   // The browser: Google, or a Solana wallet the user already has (Privy's
   // modal: Phantom, Backpack, Solflare). X sign-in was switched off 2026-09-23.
   if (platform === "web") return ["google", "wallet"];
@@ -51,7 +54,7 @@ export function loginErrorMessage(
   )
     return "Sign-in isn’t configured for this build yet.";
   if (code === "ERROR_SEEKER_UNAVAILABLE")
-    return "Seed Vault Wallet is unavailable. Continue with Google instead.";
+    return "Seed Vault Wallet is unavailable. Finish setting up your Seeker's wallet, then try again.";
   if (code === "wallet_requires_android")
     return "Wallet sign-in requires Android. Use Google on this device.";
   if (code === "wallet_unavailable")
