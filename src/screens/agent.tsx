@@ -57,7 +57,8 @@ const SUGGESTIONS = [
 ];
 const UNFUNDED = "Fund me with USDC to get started. Tap Fund.";
 
-type Shown = { id: number; from: "agent" | "user"; text: string; costMicro?: number | null };
+type Shown = { id: number; from: "agent" | "user"; text: string; costMicro?: number | null; note?: string };
+const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
 const shown = (m: StoredMessage): Shown => ({ id: m.id, from: m.role, text: m.text, costMicro: m.costMicro });
 const stateLabel: Record<string, string> = {
   none: "Not funded",
@@ -200,8 +201,10 @@ export function AgentScreen({
         return;
       }
       setTyping(true);
+      const started = Date.now();
       try {
         const token = user ? await getAccessToken() : null;
+        const tokenMs = Date.now() - started;
         const result = await runTurn({
           owner,
           token,
@@ -219,7 +222,12 @@ export function AgentScreen({
           createdAt: Date.now(),
         };
         history.current = [...history.current, userMessage, reply].slice(-60);
-        setMessages((all) => [...all, shown(reply)]);
+        const note = [
+          `token ${seconds(tokenMs)}`,
+          ...result.timings.map((t) => `${t.label} ${seconds(t.ms)}`),
+          `total ${seconds(Date.now() - started)}`,
+        ].join(" · ");
+        setMessages((all) => [...all, { ...shown(reply), note }]);
       } catch (e) {
         const why = e instanceof Error ? e.message : "Something went wrong.";
         setMessages((all) => [...all, { id: localId.current--, from: "agent", text: `I couldn't answer that: ${why}` }]);
@@ -359,9 +367,11 @@ export function AgentScreen({
             style={[s.bubble, message.from === "user" ? s.mine : s.theirs]}
           >
             <Text style={[m.text, { lineHeight: 21 }]}>{message.text}</Text>
-            {message.costMicro != null ? (
+            {message.costMicro != null || message.note ? (
               <Text style={[m.muted, { fontSize: 11, marginTop: 4 }]}>
-                {`$${fromMicro(message.costMicro).toFixed(4)}`}
+                {[message.costMicro != null ? `$${fromMicro(message.costMicro).toFixed(4)}` : "", message.note ?? ""]
+                  .filter(Boolean)
+                  .join(" · ")}
               </Text>
             ) : null}
           </View>

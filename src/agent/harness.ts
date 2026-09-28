@@ -20,7 +20,8 @@ import {
 // tap in the trade sheet, signed by their wallet.
 
 export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
-export type Writer = (messages: ChatMessage[]) => Promise<{ content: string; costMicro: number | null }>;
+export type Timing = { label: string; ms: number };
+export type Writer = (messages: ChatMessage[]) => Promise<{ content: string; costMicro: number | null; timings?: Timing[] }>;
 
 export type TurnInput = {
   owner: string;
@@ -36,6 +37,8 @@ export type TurnResult = {
   reply: string;
   costMicro: number | null;
   intent: Intent;
+  /** Where the turn's time went, in order. */
+  timings: Timing[];
 };
 
 export type Intent = "portfolio" | "dividends" | "token" | "trade" | "drip" | "market" | "chat";
@@ -167,18 +170,26 @@ async function review(input: TurnInput, reply: string): Promise<string | undefin
 }
 
 export async function runTurn(input: TurnInput): Promise<TurnResult> {
-  const { intent, needsData } = await route(input);
-  const data = needsData || intent !== "chat" ? await gather(intent, input) : [];
-  const system = await systemPrompt(input.owner);
+  const timings: Timing[] = [];
+  const time = async <T,>(label: string, run: () => Promise<T>): Promise<T> => {
+    const started = Date.now();
+    try {
+      return await run();
+    } finally {
+      timings.push({ label, ms: Date.now() - started });
+    }
+  };
+  const { intent, needsData } = await time("route", () => route(input));
+  const data = needsData || intent !== "chat" ? await time("data", () => gather(intent, input)) : [];
+  const system = await time("prompt", () => systemPrompt(input.owner));
   const content = data.length ? `${input.text}\n\n[data]\n${data.join("\n")}\n[/data]` : input.text;
-  const { content: reply, costMicro } = await input.write([
-    { role: "system", content: system },
-    ...historyMessages(input.history),
-    { role: "user", content },
-  ]);
-  const clean = reply.trim() || "I had nothing to add. Ask me about your holdings or dividends.";
+  const written = await time("write", () =>
+    input.write([{ role: "system", content: system }, ...historyMessages(input.history), { role: "user", content }]),
+  );
+  if (written.timings) timings.push(...written.timings);
+  const clean = written.content.trim() || "I had nothing to add. Ask me about your holdings or dividends.";
   // The memory review is a second decision round trip; the reply is shown
   // first and the review lands behind it.
   void review(input, clean).then((line) => line && input.onRemembered?.(line));
-  return { reply: clean, costMicro, intent };
+  return { reply: clean, costMicro: written.costMicro, intent, timings };
 }

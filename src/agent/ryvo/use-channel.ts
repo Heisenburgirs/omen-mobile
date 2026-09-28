@@ -62,6 +62,34 @@ export function useRyvoChannel(payer: ChannelPayer) {
   const address = payer.address;
   const getProvider = payer.getProvider;
   const built = useRef<{ address: string; client: RyvoChannelClient; store: ReturnType<typeof channelSessionStore> } | null>(null);
+  // Every request the channel client makes during the current call, timed,
+  // so a slow reply can be read: "quote 0.6s · reply 0.9s · check 1.8s".
+  const trace = useRef<{ label: string; ms: number }[]>([]);
+  const timed: typeof fetch = async (input, init) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
+    const label = url.includes("/v1/chat/completions")
+      ? headers.has("PAYMENT-SIGNATURE") || headers.has("payment-signature")
+        ? "reply"
+        : "quote"
+      : url.includes("/v1/payments/")
+        ? "check"
+        : url.includes("/v1/channels/")
+          ? "status"
+          : url.includes("resource=rpc")
+            ? "rpc"
+            : url.includes("/channel/")
+              ? "lifecycle"
+              : url.includes("/supported")
+                ? "profile"
+                : "other";
+    const started = Date.now();
+    try {
+      return await fetch(input, init);
+    } finally {
+      trace.current.push({ label, ms: Date.now() - started });
+    }
+  };
   const [view, setView] = useState<ChannelView | null>(null);
   const [limits, setLimits] = useState<DepositLimits>(DEFAULT_LIMITS);
   const [busy, setBusy] = useState(false);
@@ -75,11 +103,11 @@ export function useRyvoChannel(payer: ChannelPayer) {
     // key and wants the user's token; Ryvo's own endpoints get plain fetch.
     const authedFetch: typeof fetch = async (input, init) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-      if (!url.startsWith(`${config.apiUrl}/`)) return fetch(input, init);
+      if (!url.startsWith(`${config.apiUrl}/`)) return timed(input, init);
       const token = user ? await getAccessToken() : null;
       const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
       if (token) headers.set("authorization", `Bearer ${token}`);
-      return fetch(input, { ...init, headers });
+      return timed(input, { ...init, headers });
     };
     const store = channelSessionStore(scope);
     const client = new RyvoChannelClient({
@@ -179,8 +207,9 @@ export function useRyvoChannel(payer: ChannelPayer) {
 
   /** One reply, prepaid from the channel. */
   const write = useCallback(
-    async (messages: ChatMessage[]): Promise<{ content: string; costMicro: number | null }> => {
+    async (messages: ChatMessage[]): Promise<{ content: string; costMicro: number | null; timings: { label: string; ms: number }[] }> => {
       const { client } = await handles();
+      trace.current = [];
       const { response, receipt } = await client.paidFetch("/v1/chat/completions", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -202,8 +231,10 @@ export function useRyvoChannel(payer: ChannelPayer) {
       const raw = data.choices?.[0]?.message?.content;
       const content = typeof raw === "string" ? raw : Array.isArray(raw) ? raw.map((p) => p.text ?? "").join("") : "";
       const costMicro = receipt ? Number(receipt.chargedAmount) : null;
+      const timings = trace.current;
+      trace.current = [];
       refresh().catch(() => undefined);
-      return { content, costMicro };
+      return { content, costMicro, timings };
     },
     [handles, refresh],
   );
