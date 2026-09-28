@@ -246,6 +246,7 @@ export function AgentScreen({
         };
         history.current = [...history.current, userMessage, reply].slice(-60);
         const note = [
+          `${result.model} (${result.plan.source})`,
           `token ${seconds(tokenMs)}`,
           ...result.timings.map((t) => `${t.label} ${seconds(t.ms)}`),
           `total ${seconds(Date.now() - started)}`,

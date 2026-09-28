@@ -4,7 +4,7 @@ import { Platform } from "react-native";
 import { config } from "../../config";
 import { usePrivy } from "../../lib/privy";
 import { getItemAsync, setItemAsync } from "../../lib/secure-store";
-import type { ChatMessage } from "../harness";
+import type { ChatMessage, WriteOptions } from "../harness";
 import { kvGet, kvSet } from "../store";
 import { RYVO, fromMicro, toMicro } from "./config";
 import { channelSessionStore } from "./session-store";
@@ -211,16 +211,19 @@ export function useRyvoChannel(payer: ChannelPayer) {
 
   /** One reply, prepaid from the channel. */
   const write = useCallback(
-    async (messages: ChatMessage[]): Promise<{ content: string; costMicro: number | null; timings: { label: string; ms: number }[] }> => {
+    async (
+      messages: ChatMessage[],
+      options?: WriteOptions,
+    ): Promise<{ content: string; costMicro: number | null; timings: { label: string; ms: number }[] }> => {
       const { client } = await handles();
       trace.current = [];
       const { response, receipt } = await client.paidFetch("/v1/chat/completions", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          model: RYVO.chatModel,
+          model: options?.model ?? RYVO.chatModel,
           messages,
-          max_tokens: RYVO.maxOutputTokens,
+          max_tokens: options?.maxTokens ?? RYVO.maxOutputTokens,
           temperature: 0.4,
           stream: false,
         }),

@@ -6,15 +6,8 @@ import { config } from "../config";
 // and code branches on the numbers. The site proxies the call (OMEN pays for
 // these; they cost a few thousandths of a cent) and the app never holds a
 // gateway key.
-export type Question =
-  | { type: "choice"; instructions: string; criteria: Record<string, string> }
-  | { type: "score"; instructions: string; criteria: string[] }
-  | { type: "boolean"; instructions: string; criteria?: { true: string; false: string } };
-
-export type Answer =
-  | { type: "choice"; choice: string; probabilities?: Record<string, number> }
-  | { type: "score"; score: number; probabilities?: Record<string, number> }
-  | { type: "boolean"; probability: number };
+import type { Answer, Question } from "./jev-types";
+export type { Answer, Question } from "./jev-types";
 
 export class DecisionError extends Error {
   constructor(message: string, readonly status: number) {
