@@ -1,14 +1,16 @@
 import { Platform } from "react-native";
 import { install as installEd25519 } from "@solana/webcrypto-ed25519-polyfill";
-import { sha256 } from "@noble/hashes/sha2";
+import { sha256, sha384, sha512 } from "@noble/hashes/sha2";
+import { sha1 } from "@noble/hashes/sha1";
 
 // What Ryvo's channel client expects from the platform and Hermes does not
 // have. A browser has all of it, so on the web this does nothing.
 //
 // - `crypto.subtle` Ed25519: the delegated voucher key is a WebCrypto key in
 //   Solana's kit, so Solana's own polyfill provides the curve in userspace.
-// - `crypto.subtle.digest("SHA-256")`: request fingerprints and voucher
-//   hashes; a few lines over noble's SHA-256.
+// - `crypto.subtle.digest`: request fingerprints and voucher hashes use
+//   SHA-256, and the Ed25519 polyfill derives keys with SHA-512; a few
+//   lines over noble's hashes cover the SHA family.
 // - `AbortSignal.timeout`: React Native's AbortSignal polyfill has no
 //   `timeout` factory.
 // - `structuredClone`: only the client's in-memory session store uses it,
@@ -27,14 +29,21 @@ export function installAgentPolyfills(): void {
   installEd25519();
   const subtle = (g.crypto.subtle ||= {});
   if (typeof subtle.digest !== "function") {
+    const hashes: Record<string, (data: Uint8Array) => Uint8Array> = {
+      "SHA-1": sha1,
+      "SHA-256": sha256,
+      "SHA-384": sha384,
+      "SHA-512": sha512,
+    };
     subtle.digest = async (algorithm: string | { name: string }, data: ArrayBuffer | ArrayBufferView) => {
       const name = (typeof algorithm === "string" ? algorithm : algorithm.name).toUpperCase();
-      if (name !== "SHA-256") throw new Error(`Unsupported digest: ${name}`);
+      const hash = hashes[name];
+      if (!hash) throw new Error(`Unsupported digest: ${name}`);
       const bytes =
         data instanceof ArrayBuffer
           ? new Uint8Array(data)
           : new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
-      const digest = sha256(bytes);
+      const digest = hash(bytes);
       return digest.buffer.slice(digest.byteOffset, digest.byteOffset + digest.byteLength);
     };
   }
