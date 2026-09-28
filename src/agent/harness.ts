@@ -29,12 +29,12 @@ export type TurnInput = {
   history: StoredMessage[];
   fetch: Fetcher;
   write: Writer;
+  /** Called after the reply is shown if the turn added a line to USER.md. */
+  onRemembered?: (line: string) => void;
 };
 export type TurnResult = {
   reply: string;
   costMicro: number | null;
-  /** A line the agent added to USER.md this turn, if any. */
-  remembered?: string;
   intent: Intent;
 };
 
@@ -177,6 +177,8 @@ export async function runTurn(input: TurnInput): Promise<TurnResult> {
     { role: "user", content },
   ]);
   const clean = reply.trim() || "I had nothing to add. Ask me about your holdings or dividends.";
-  const remembered = await review(input, clean);
-  return { reply: clean, costMicro, remembered, intent };
+  // The memory review is a second decision round trip; the reply is shown
+  // first and the review lands behind it.
+  void review(input, clean).then((line) => line && input.onRemembered?.(line));
+  return { reply: clean, costMicro, intent };
 }

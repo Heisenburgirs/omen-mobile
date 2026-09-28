@@ -209,6 +209,7 @@ export function AgentScreen({
           history: history.current,
           fetch: ((resource, params = {}) => mobileFetch(resource, params, token)) as Fetcher,
           write: channel.write,
+          onRemembered: () => showToast("Noted for next time"),
         });
         const reply = (await addMessage(owner, "agent", result.reply, result.costMicro).catch(() => null)) ?? {
           id: localId.current--,
@@ -219,7 +220,6 @@ export function AgentScreen({
         };
         history.current = [...history.current, userMessage, reply].slice(-60);
         setMessages((all) => [...all, shown(reply)]);
-        if (result.remembered) showToast("Noted for next time");
       } catch (e) {
         const why = e instanceof Error ? e.message : "Something went wrong.";
         setMessages((all) => [...all, { id: localId.current--, from: "agent", text: `I couldn't answer that: ${why}` }]);
