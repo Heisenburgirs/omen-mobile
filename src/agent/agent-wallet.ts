@@ -14,7 +14,7 @@ export type AgentWalletInfo = { address: string | null; delegated: boolean };
 type WalletRow = { address: string; primary: boolean; imported: boolean };
 
 export function useAgentWallet() {
-  const { user, getAccessToken } = usePrivy();
+  const { user, getAccessToken, refreshUser } = usePrivy();
   const wallet = useEmbeddedSolanaWallet();
   const info = useMobile<AgentWalletInfo>("agent-wallet", {}, Boolean(user), 60000);
   const act = useMobileAction();
@@ -26,14 +26,16 @@ export function useAgentWallet() {
 
   const getProvider = useCallback(async (): Promise<WalletProvider> => {
     if (!address) throw new Error("Your agent's wallet is still being prepared.");
-    // Privy lists a new wallet a moment after creating it.
-    for (let i = 0; i < 20; i++) {
+    // Privy's list of signing accounts follows its user object: a wallet
+    // made a moment ago shows up after the user is refreshed.
+    for (let i = 0; i < 12; i++) {
       const account = accounts.current.find((a) => a.address === address);
       if (account) return (await account.getProvider()) as unknown as WalletProvider;
-      await new Promise((r) => setTimeout(r, 500));
+      if (i % 3 === 0) await refreshUser().catch(() => undefined);
+      await new Promise((r) => setTimeout(r, 1000));
     }
     throw new Error("Your agent's wallet is not on this device yet. Try again in a moment.");
-  }, [address]);
+  }, [address, refreshUser]);
 
   /** The agent's wallet address, creating the wallet the first time. */
   const ensure = useCallback(async (): Promise<string> => {
@@ -45,6 +47,8 @@ export function useAgentWallet() {
       const before = new Set((await list()).map((w) => w.address));
       if (!wallet.create) throw new Error("Your wallet is still being prepared. Try again in a moment.");
       await wallet.create({ recoveryMethod: "privy", createAdditional: true });
+      // The signing accounts on this device follow the refreshed user.
+      await refreshUser().catch(() => undefined);
       let fresh: string | undefined;
       for (let i = 0; i < 10 && !fresh; i++) {
         fresh = (await list()).find((w) => !w.primary && !w.imported && !before.has(w.address))?.address;
@@ -58,7 +62,7 @@ export function useAgentWallet() {
       creating.current = null;
     });
     return creating.current;
-  }, [address, user, getAccessToken, wallet, act]);
+  }, [address, user, getAccessToken, refreshUser, wallet, act]);
 
   /** USDC sitting in the agent's wallet outside the channel, read from the chain. */
   const idleUsdc = useCallback(async (): Promise<number> => {

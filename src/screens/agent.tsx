@@ -55,17 +55,16 @@ const SUGGESTIONS = [
   "Find tokens that pay in ZEC",
   "How is my portfolio doing?",
 ];
-const UNFUNDED =
-  "I run on my own wallet: USDC you move into it goes into a payment channel with Ryvo, is spent a fraction of a cent per reply, and comes back when you withdraw. Tap Fund to start.";
+const UNFUNDED = "Fund me with USDC to get started. Tap Fund.";
 
 type Shown = { id: number; from: "agent" | "user"; text: string; costMicro?: number | null };
 const shown = (m: StoredMessage): Shown => ({ id: m.id, from: m.role, text: m.text, costMicro: m.costMicro });
 const stateLabel: Record<string, string> = {
   none: "Not funded",
-  opening: "Opening…",
+  opening: "Funding…",
   open: "",
-  closing: "Closing",
-  sealed: "Closing",
+  closing: "Withdrawing…",
+  sealed: "Withdrawing…",
   distributed: "Withdrawn",
   reclaimed: "Withdrawn",
 };
@@ -259,12 +258,19 @@ export function AgentScreen({
     },
     [agent.address, primary, idleUsdc, actions, refreshIdle],
   );
+  /** A failure the user can read later: in the thread, not only a toast. */
+  const report = (what: string, e: unknown) => {
+    const why = e instanceof Error && e.message ? e.message : "Something went wrong.";
+    showToast(why);
+    setMessages((all) => [...all, { id: localId.current--, from: "agent", text: `${what}: ${why}` }]);
+  };
   const submit = async () => {
     setMoving(true);
     try {
       if (direction === "fund") {
         // The agent's wallet first (made now if it is the first time), then
-        // USDC from the user's wallet into it, then into the channel.
+        // USDC from the user's wallet into it, then into the channel. USDC
+        // already in the agent's wallet is used before any leaves the user's.
         const address = await agent.ensure();
         const have = await idleUsdc().catch(() => 0);
         const need = value - have;
@@ -277,15 +283,13 @@ export function AgentScreen({
         await refreshIdle();
         setTransfer(false);
         setAmount("");
-        showToast(next.state === "open" ? `Agent funded: ${usd(next.availableUsdc)} to spend` : "Funding is on its way");
+        showToast(next.state === "open" ? `Agent funded: ${usd(next.availableUsdc)} available` : "Funding…");
       } else {
-        // Closing returns the unspent deposit to the agent's wallet; from
-        // there it goes back to the user's.
         const refund = channel.view?.availableUsdc ?? 0;
         const next = await channel.withdraw();
         if (next.closeDeadline) {
           setTransfer(false);
-          showToast("Withdrawal requested; the deposit returns after Ryvo's 48-hour window");
+          showToast("Withdrawal started. Funds return within 48 hours.");
           return;
         }
         const moved = await sweep(refund);
@@ -293,7 +297,8 @@ export function AgentScreen({
         showToast(`${usd(moved)} returned to your wallet`);
       }
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "That didn't go through. Try again.");
+      setTransfer(false);
+      report(direction === "fund" ? "Funding stopped" : "Withdrawal stopped", e);
       void refreshIdle();
     } finally {
       setMoving(false);
@@ -303,9 +308,11 @@ export function AgentScreen({
     setMoving(true);
     try {
       const moved = await sweep(0);
+      setTransfer(false);
       showToast(`${usd(moved)} returned to your wallet`);
     } catch (e) {
-      showToast(e instanceof Error ? e.message : "That didn't go through. Try again.");
+      setTransfer(false);
+      report("Withdrawal stopped", e);
     } finally {
       setMoving(false);
     }
@@ -323,7 +330,7 @@ export function AgentScreen({
           </Text>
           {label || idle > 0.005 ? (
             <Text style={[m.muted, { fontSize: 12 }]}>
-              {[label, idle > 0.005 ? `${usd(idle)} in the agent's wallet` : ""].filter(Boolean).join(" · ")}
+              {[label, idle > 0.005 ? `${usd(idle)} ready to add` : ""].filter(Boolean).join(" · ")}
             </Text>
           ) : null}
         </View>
@@ -365,9 +372,7 @@ export function AgentScreen({
             onPress={() => setAttempt((n) => n + 1)}
             style={({ pressed }) => [s.bubble, s.theirs, { opacity: pressed ? 0.6 : 1 }]}
           >
-            <Text style={[m.text, { lineHeight: 21 }]}>
-              Your agent is sealed under your wallet's key. Tap to sign and unlock it.
-            </Text>
+            <Text style={[m.text, { lineHeight: 21 }]}>Tap to unlock your agent.</Text>
           </Pressable>
         ) : null}
         {typing ? (
@@ -424,13 +429,13 @@ export function AgentScreen({
       <OmenSheet
         visible={transfer}
         onClose={() => !working && setTransfer(false)}
-        title={direction === "fund" ? (funded ? "Add to agent" : "Fund agent") : "Withdraw from agent"}
+        title={direction === "fund" ? (funded ? "Add funds" : "Fund agent") : "Withdraw funds"}
       >
         <View style={{ gap: 16, paddingTop: 4, paddingHorizontal: 24, paddingBottom: 8 }}>
           <Text style={m.muted}>
             {direction === "fund"
-              ? `USDC moves from your wallet into your agent's own wallet and on into its payment channel with Ryvo. Each reply costs a fraction of a cent from it; the rest comes back when you withdraw. ${channel.limits.minUsdc} to ${channel.limits.maxUsdc} USDC.`
-              : "Closes the channel: what your agent hasn't spent comes back to your wallet, what it spent settles to Ryvo."}
+              ? `USDC funds your agent. ${channel.limits.minUsdc} to ${channel.limits.maxUsdc} USDC at a time; withdraw whenever you like.`
+              : "Returns your agent's unused USDC to your wallet."}
           </Text>
           {direction === "withdraw" && !funded && idle > 0.005 ? (
             <Button
@@ -519,14 +524,14 @@ export function AgentScreen({
                 : direction === "fund"
                   ? over
                     ? roomUsdc < cashUsd
-                      ? "Over the channel limit"
+                      ? `Up to ${usd(roomUsdc)} more`
                       : "Not enough USDC"
                     : under
                       ? `At least ${channel.limits.minUsdc} USDC`
                       : funded
-                        ? "Add"
-                        : "Fund"
-                  : "Withdraw"
+                        ? "Add funds"
+                        : "Fund agent"
+                  : "Withdraw funds"
             }
             disabled={working || (direction === "fund" ? !value || over || under : !funded)}
             onPress={() => void submit()}
