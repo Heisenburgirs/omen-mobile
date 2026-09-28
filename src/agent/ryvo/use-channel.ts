@@ -10,6 +10,7 @@ import { RYVO, fromMicro, toMicro } from "./config";
 import { channelSessionStore } from "./session-store";
 import { decodeSeed, encodeSeed, naclVoucherSigner, randomSeed } from "./voucher-signer";
 import { walletSigner, type WalletProvider } from "./wallet-signer";
+import { useLatest } from "../use-latest";
 
 /**
  * The seed of the key that signs vouchers for this wallet's channel, in the
@@ -60,7 +61,8 @@ const toView = (s: ChannelStatus): ChannelView => ({
 export function useRyvoChannel(payer: ChannelPayer) {
   const { user, getAccessToken } = usePrivy();
   const address = payer.address;
-  const getProvider = payer.getProvider;
+  // Privy and the payer hand out new functions on every render; see use-latest.ts.
+  const latest = useLatest({ user, getAccessToken, getProvider: payer.getProvider });
   const built = useRef<{ address: string; client: RyvoChannelClient; store: ReturnType<typeof channelSessionStore> } | null>(null);
   // Every request the channel client makes during the current call, timed,
   // so a slow reply can be read: "quote 0.6s · reply 0.9s · check 1.8s".
@@ -104,6 +106,7 @@ export function useRyvoChannel(payer: ChannelPayer) {
     const authedFetch: typeof fetch = async (input, init) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
       if (!url.startsWith(`${config.apiUrl}/`)) return timed(input, init);
+      const { user, getAccessToken } = latest.current;
       const token = user ? await getAccessToken() : null;
       const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
       if (token) headers.set("authorization", `Bearer ${token}`);
@@ -114,14 +117,15 @@ export function useRyvoChannel(payer: ChannelPayer) {
       gatewayUrl: RYVO.gatewayUrl,
       facilitatorUrl: RYVO.facilitatorUrl,
       rpcUrl: `${config.apiUrl}/api/mobile?resource=rpc`,
-      wallet: walletSigner(address, getProvider),
+      wallet: walletSigner(address, () => latest.current.getProvider()),
       voucherSigner: naclVoucherSigner(seed),
       store,
       fetch: authedFetch,
     });
     built.current = { address, client, store };
     return built.current;
-  }, [address, getProvider, user, getAccessToken]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [address]);
 
   /** The channel as Ryvo sees it now; "none" when this device has no channel for the wallet. */
   const refresh = useCallback(async (): Promise<ChannelView> => {

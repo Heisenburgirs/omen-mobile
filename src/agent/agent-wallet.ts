@@ -2,6 +2,7 @@ import { useCallback, useRef } from "react";
 import { mobileFetch, useMobile, useMobileAction } from "../lib/mobile-api";
 import { useEmbeddedSolanaWallet, usePrivy } from "../lib/privy";
 import { USDC } from "../domain/models";
+import { useLatest } from "./use-latest";
 import type { WalletProvider } from "./ryvo/wallet-signer";
 
 // The agent's own wallet: a second Privy embedded wallet, made for the user
@@ -22,6 +23,8 @@ export function useAgentWallet() {
   const accounts = useRef(wallet.wallets ?? []);
   accounts.current = wallet.wallets ?? [];
   const creating = useRef<Promise<string> | null>(null);
+  // Privy hands out new functions on every render; see use-latest.ts.
+  const privy = useLatest({ user, getAccessToken, refreshUser, wallet, act });
   const address = info.data?.data.address ?? null;
 
   const getProvider = useCallback(async (): Promise<WalletProvider> => {
@@ -31,17 +34,18 @@ export function useAgentWallet() {
     for (let i = 0; i < 12; i++) {
       const account = accounts.current.find((a) => a.address === address);
       if (account) return (await account.getProvider()) as unknown as WalletProvider;
-      if (i % 3 === 0) await refreshUser().catch(() => undefined);
+      if (i % 3 === 0) await privy.current.refreshUser().catch(() => undefined);
       await new Promise((r) => setTimeout(r, 1000));
     }
     throw new Error("Your agent's wallet is not on this device yet. Try again in a moment.");
-  }, [address, refreshUser]);
+  }, [address, privy]);
 
   /** The agent's wallet address, creating the wallet the first time. */
   const ensure = useCallback(async (): Promise<string> => {
     if (address) return address;
     if (creating.current) return creating.current;
     creating.current = (async () => {
+      const { user, getAccessToken, refreshUser, wallet, act } = privy.current;
       const token = user ? await getAccessToken() : null;
       const list = async () => (await mobileFetch<WalletRow[]>("wallets", { refresh: "1" }, token)).data;
       const before = new Set((await list()).map((w) => w.address));
@@ -62,11 +66,12 @@ export function useAgentWallet() {
       creating.current = null;
     });
     return creating.current;
-  }, [address, user, getAccessToken, refreshUser, wallet, act]);
+  }, [address, privy]);
 
   /** USDC sitting in the agent's wallet outside the channel, read from the chain. */
   const idleUsdc = useCallback(async (): Promise<number> => {
     if (!address) return 0;
+    const { user, getAccessToken } = privy.current;
     const token = user ? await getAccessToken() : null;
     const body = await mobileFetch<unknown>("rpc", {}, token, undefined, "POST", {
       jsonrpc: "2.0",
@@ -78,7 +83,7 @@ export function useAgentWallet() {
       result?: { value?: { account?: { data?: { parsed?: { info?: { tokenAmount?: { uiAmount?: number | null } } } } } }[] };
     }).result;
     return (result?.value ?? []).reduce((sum, a) => sum + Number(a.account?.data?.parsed?.info?.tokenAmount?.uiAmount ?? 0), 0);
-  }, [address, user, getAccessToken]);
+  }, [address, privy]);
 
   return {
     address,

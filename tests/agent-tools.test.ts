@@ -30,3 +30,14 @@ test("portfolioSummary lists holdings largest first with a total", async () => {
   assert.equal(parsed.totalUsd, 112.5);
   assert.deepEqual(parsed.holdings.map((h: { symbol: string }) => h.symbol), ["ZEC", "USDC", "DUST"]);
 });
+
+test("guessIntent reads the obvious ones without Jev", async () => {
+  const { guessIntent } = await import("../src/agent/intent");
+  assert.equal(guessIntent("Hi"), "chat");
+  assert.equal(guessIntent("what model is this"), "chat");
+  assert.equal(guessIntent("What paid me this week?"), "dividends");
+  assert.equal(guessIntent("how is my portfolio doing"), "portfolio");
+  assert.equal(guessIntent("should I buy more ZEC"), "trade");
+  assert.equal(guessIntent("tell me about $SOL"), "token");
+  assert.equal(guessIntent("set up a drip into xSOL"), "drip");
+});

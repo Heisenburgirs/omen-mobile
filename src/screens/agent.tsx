@@ -21,7 +21,8 @@ import { showToast } from "../lib/toast";
 import { mobileFetch, useMobile } from "../lib/mobile-api";
 import { useEmbeddedSolanaWallet, usePrivy } from "../lib/privy";
 import { useChainActions } from "../lib/chain-actions";
-import { lockIdentity, unlockIdentity } from "../agent/identity";
+import { isUnlocked, lockIdentity, unlockIdentity } from "../agent/identity";
+import { useLatest } from "../agent/use-latest";
 import { messageSigner, type WalletProvider } from "../agent/ryvo/wallet-signer";
 import { USDC } from "../domain/models";
 import { runTurn } from "../agent/harness";
@@ -100,10 +101,11 @@ export function AgentScreen({
   // leaves there until it is moved back, or a funding that stopped halfway.
   const [idle, setIdle] = useState(0);
   const idleUsdc = agent.idleUsdc;
-  const refreshIdle = useCallback(() => idleUsdc().then(setIdle).catch(() => undefined), [idleUsdc]);
+  const idleRef = useLatest(idleUsdc);
+  const refreshIdle = useCallback(() => idleRef.current().then(setIdle).catch(() => undefined), [idleRef]);
   useEffect(() => {
     void refreshIdle();
-  }, [refreshIdle]);
+  }, [agent.address, refreshIdle]);
 
   const [transfer, setTransfer] = useState(false);
   // Which way the money goes: into the agent, or back out to the wallet.
@@ -145,24 +147,35 @@ export function AgentScreen({
   // everything it remembers is sealed under that key on this device.
   const embedded = useEmbeddedSolanaWallet();
   const signerAccount = primary ? (embedded.wallets ?? []).find((w) => w.address === primary) : undefined;
+  // The account object is new on every render; the effect keys on its address.
+  const signerRef = useLatest(signerAccount);
+  const signerAddress = signerAccount?.address ?? null;
   const [identity, setIdentity] = useState<"locked" | "unlocking" | "open" | "failed">("locked");
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
-    if (!owner || !signerAccount) {
+    if (!owner || !signerAddress) {
       lockIdentity();
       setIdentity("locked");
       return;
     }
+    if (isUnlocked(owner)) {
+      setIdentity("open");
+      return;
+    }
     let cancelled = false;
     setIdentity("unlocking");
-    const sign = messageSigner(owner, () => signerAccount.getProvider() as unknown as Promise<WalletProvider>);
+    const sign = messageSigner(owner, async () => {
+      const account = signerRef.current;
+      if (!account) throw new Error("Your wallet is still being prepared.");
+      return (await account.getProvider()) as unknown as WalletProvider;
+    });
     unlockIdentity(owner, sign)
       .then(() => !cancelled && setIdentity("open"))
       .catch(() => !cancelled && setIdentity("failed"));
     return () => {
       cancelled = true;
     };
-  }, [owner, signerAccount, attempt]);
+  }, [owner, signerAddress, attempt, signerRef]);
 
   // The conversation so far, from the device, once the identity is open.
   useEffect(() => {
@@ -210,7 +223,17 @@ export function AgentScreen({
           token,
           text: clean,
           history: history.current,
-          fetch: ((resource, params = {}) => mobileFetch(resource, params, token)) as Fetcher,
+          // A lookup that has not answered in 8 s is left out of the reply
+          // rather than holding it up.
+          fetch: (async (resource: string, params: Record<string, string> = {}) => {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 8000);
+            try {
+              return await mobileFetch(resource, params, token, controller.signal);
+            } finally {
+              clearTimeout(timer);
+            }
+          }) as Fetcher,
           write: channel.write,
           onRemembered: () => showToast("Noted for next time"),
         });

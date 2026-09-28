@@ -1,6 +1,8 @@
 import { decide, yes, type Answer } from "./jev";
 import { loadEntries, remember, renderBlock } from "./memory";
 import { searchMessages, type StoredMessage } from "./store";
+import { INTENTS, guessIntent, type Intent } from "./intent";
+export { guessIntent, type Intent } from "./intent";
 import {
   assetDetail,
   dividendSummary,
@@ -41,16 +43,7 @@ export type TurnResult = {
   timings: Timing[];
 };
 
-export type Intent = "portfolio" | "dividends" | "token" | "trade" | "drip" | "market" | "chat";
-const INTENTS: Record<Intent, string> = {
-  portfolio: "Their holdings, balance, performance or what they own",
-  dividends: "Dividends or payouts they received or could receive",
-  token: "A specific token, stock or coin: its price, dividend, or whether to hold it",
-  trade: "Buying, selling, swapping or reinvesting: an action with money",
-  drip: "Their automatic reinvesting (drip) rules",
-  market: "The market in general, what is moving, ideas to look at",
-  chat: "Small talk, thanks, or a question about the agent itself",
-};
+
 
 const IDENTITY = `You are OMEN's agent: a personal trading and dividend assistant living on the user's phone.
 Rules:
@@ -106,8 +99,12 @@ async function gather(intent: Intent, input: TurnInput): Promise<string[]> {
   return parts;
 }
 
-/** Where a message goes. Jev answers; low confidence falls back to a general reply with portfolio data. */
+
+/** Where a message goes. Jev answers; when it cannot, the keyword reading does. */
 export async function route(input: TurnInput): Promise<{ intent: Intent; needsData: boolean }> {
+  const guess = guessIntent(input.text);
+  // "Hi", "thanks", "what model is this": nothing to look up, nothing to decide.
+  if (guess === "chat" && input.text.trim().split(/\s+/).length <= 6) return { intent: "chat", needsData: false };
   try {
     const answers = await decide(
       input.token,
@@ -121,11 +118,11 @@ export async function route(input: TurnInput): Promise<{ intent: Intent; needsDa
       },
     );
     const intent = answers.intent as Answer;
-    const chosen = intent.type === "choice" && intent.choice in INTENTS ? (intent.choice as Intent) : "chat";
+    const chosen = intent.type === "choice" && intent.choice in INTENTS ? (intent.choice as Intent) : guess;
     const sure = intent.type === "choice" ? (intent.probabilities?.[intent.choice] ?? 1) : 0;
-    return { intent: sure >= 0.45 ? chosen : "portfolio", needsData: yes(answers.needsData, 0.5) };
+    return { intent: sure >= 0.45 ? chosen : guess, needsData: yes(answers.needsData, 0.5) };
   } catch {
-    return { intent: "portfolio", needsData: true };
+    return { intent: guess, needsData: guess !== "chat" };
   }
 }
 

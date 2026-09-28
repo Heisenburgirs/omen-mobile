@@ -26,7 +26,7 @@ export async function decide<Q extends Record<string, Question>>(
   token: string | null,
   state: unknown,
   questions: Q,
-  timeoutMs = 12000,
+  timeoutMs = 6000,
 ): Promise<Record<keyof Q, Answer>> {
   if (!token) throw new DecisionError("Please sign in again.", 401);
   const controller = new AbortController();
