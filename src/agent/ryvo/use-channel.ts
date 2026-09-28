@@ -1,11 +1,32 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RyvoChannelClient, type ChannelStatus } from "@ryvo/channel-client";
+import { Platform } from "react-native";
 import { config } from "../../config";
 import { usePrivy } from "../../lib/privy";
+import { getItemAsync, setItemAsync } from "../../lib/secure-store";
 import type { ChatMessage } from "../harness";
+import { kvGet, kvSet } from "../store";
 import { RYVO, fromMicro, toMicro } from "./config";
 import { channelSessionStore } from "./session-store";
+import { decodeSeed, encodeSeed, naclVoucherSigner, randomSeed } from "./voucher-signer";
 import { walletSigner, type WalletProvider } from "./wallet-signer";
+
+/**
+ * The seed of the key that signs vouchers for this wallet's channel, in the
+ * device keystore (the agent's sealed store in a browser): the same slot the
+ * channel session store fills, so a channel opened earlier keeps its key.
+ */
+async function voucherSeed(scope: string): Promise<Uint8Array> {
+  const key = `ryvo.voucher.${scope}`;
+  const keystore = Platform.OS !== "web";
+  const stored = keystore ? await getItemAsync(key) : await kvGet(key);
+  if (stored) return decodeSeed(stored);
+  const seed = randomSeed();
+  const encoded = encodeSeed(seed);
+  if (keystore) await setItemAsync(key, encoded);
+  else await kvSet(key, encoded);
+  return seed;
+}
 
 // The agent's balance: a USDC payment channel between the agent's own Privy
 // wallet and Ryvo, kept on this device. Funding opens the channel (or tops
@@ -45,9 +66,11 @@ export function useRyvoChannel(payer: ChannelPayer) {
   const [limits, setLimits] = useState<DepositLimits>(DEFAULT_LIMITS);
   const [busy, setBusy] = useState(false);
 
-  const handles = useCallback(() => {
+  const handles = useCallback(async () => {
     if (!address) throw new Error("Your agent's wallet is still being prepared. Try again in a moment.");
     if (built.current?.address === address) return built.current;
+    const scope = `${config.network}.${address}`;
+    const seed = await voucherSeed(scope);
     // The channel's few RPC calls go through the site, which holds the RPC
     // key and wants the user's token; Ryvo's own endpoints get plain fetch.
     const authedFetch: typeof fetch = async (input, init) => {
@@ -58,12 +81,13 @@ export function useRyvoChannel(payer: ChannelPayer) {
       if (token) headers.set("authorization", `Bearer ${token}`);
       return fetch(input, { ...init, headers });
     };
-    const store = channelSessionStore(`${config.network}.${address}`);
+    const store = channelSessionStore(scope);
     const client = new RyvoChannelClient({
       gatewayUrl: RYVO.gatewayUrl,
       facilitatorUrl: RYVO.facilitatorUrl,
       rpcUrl: `${config.apiUrl}/api/mobile?resource=rpc`,
       wallet: walletSigner(address, getProvider),
+      voucherSigner: naclVoucherSigner(seed),
       store,
       fetch: authedFetch,
     });
@@ -77,7 +101,7 @@ export function useRyvoChannel(payer: ChannelPayer) {
       setView(null);
       return NONE;
     }
-    const { client, store } = handles();
+    const { client, store } = await handles();
     const persisted = await store.load();
     if (!persisted) {
       setView(NONE);
@@ -102,7 +126,7 @@ export function useRyvoChannel(payer: ChannelPayer) {
   /** Ryvo's deposit bounds, read once the fund sheet opens. */
   const loadLimits = useCallback(async () => {
     try {
-      const profile = await handles().client.profile();
+      const profile = await (await handles()).client.profile();
       const next = {
         minUsdc: fromMicro(profile.minimumDeposit),
         suggestedUsdc: fromMicro(profile.suggestedDeposit),
@@ -128,7 +152,7 @@ export function useRyvoChannel(payer: ChannelPayer) {
   const fund = useCallback(
     (usdc: number) =>
       run(async () => {
-        const { client, store } = handles();
+        const { client, store } = await handles();
         const current = await refresh();
         // A closed channel is finished from this side; a new one starts fresh.
         if (current.state === "distributed" || current.state === "reclaimed") await store.clear();
@@ -145,7 +169,7 @@ export function useRyvoChannel(payer: ChannelPayer) {
   const withdraw = useCallback(
     () =>
       run(async () => {
-        const { client } = handles();
+        const { client } = await handles();
         const next = toView(await client.close());
         setView(next);
         return next;
@@ -156,7 +180,7 @@ export function useRyvoChannel(payer: ChannelPayer) {
   /** One reply, prepaid from the channel. */
   const write = useCallback(
     async (messages: ChatMessage[]): Promise<{ content: string; costMicro: number | null }> => {
-      const { client } = handles();
+      const { client } = await handles();
       const { response, receipt } = await client.paidFetch("/v1/chat/completions", {
         method: "POST",
         headers: { "content-type": "application/json" },

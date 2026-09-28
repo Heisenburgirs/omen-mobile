@@ -1,8 +1,8 @@
 import { Buffer } from "buffer";
 import { VersionedTransaction } from "@solana/web3.js";
-import { ed25519 } from "@noble/curves/ed25519";
 import { getBase58Encoder, getBase64EncodedWireTransaction } from "@solana/kit";
 import type { RyvoChannelClientOptions } from "@ryvo/channel-client";
+import { verifyEd25519 } from "./voucher-signer";
 
 // The user's Privy embedded wallet, presented to Ryvo's channel client as a
 // Solana kit signer. The wallet signs three kinds of things: the channel's
@@ -67,7 +67,7 @@ export function messageSigner(
       }
       const { signature } = await provider.request({ method: "signMessage", params: { message } });
       const bytes = decodeSignature(signature);
-      if (bytes && ed25519.verify(bytes, content, publicKey)) {
+      if (bytes && verifyEd25519(content, bytes, publicKey)) {
         messageMode = mode;
         return bytes;
       }
@@ -99,7 +99,7 @@ export function walletSigner(
         const index = keys.findIndex((key) => key.toBase58() === address);
         const signature = index >= 0 ? signedTransaction.signatures[index] : undefined;
         if (!signature || signature.every((byte) => byte === 0)) throw new Error("Your wallet did not sign the transaction.");
-        if (!ed25519.verify(signature, signedTransaction.message.serialize(), publicKey))
+        if (!verifyEd25519(new Uint8Array(signedTransaction.message.serialize()), new Uint8Array(signature), publicKey))
           throw new Error("Your wallet's signature did not verify.");
         out.push({ [address]: new Uint8Array(signature) });
       }
