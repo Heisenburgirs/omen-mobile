@@ -4319,13 +4319,13 @@ function ActivityContent({
   // page from the server when the loaded ones run out.
   const [shown, setShown] = useState(5);
   // What to show: the payouts, or what DRIP did with them.
-  type What = "all" | "payouts" | "buyback" | "cashout" | "swap";
+  // A cash-out is a swap into USDC, so it sits under Swaps.
+  type What = "all" | "payouts" | "buyback" | "swap";
   const [what, setWhat] = useState<What>("all");
   const whats: [What, string][] = [
     ["all", "All"],
     ["payouts", "Payouts"],
     ["buyback", "Compounds"],
-    ["cashout", "Cashouts"],
     ["swap", "Swaps"],
   ];
   const q = useMobile<Activity[]>(
@@ -4362,7 +4362,11 @@ function ActivityContent({
     (r) =>
       (!dividends || r.kind === "dividend" || r.kind === "drip") &&
       (what === "all" ||
-        (what === "payouts" ? r.kind === "dividend" : r.drip?.kind === what)) &&
+        (what === "payouts"
+          ? r.kind === "dividend"
+          : what === "swap"
+            ? r.drip?.kind === "swap" || r.drip?.kind === "cashout"
+            : r.drip?.kind === what)) &&
       // A token's dividends are the payouts it made (its source), not the
       // payout token itself; the chip filter on the Omen tab picks sources too.
       // A drip belongs to the token whose dividends it swapped.
@@ -4740,7 +4744,6 @@ function DividendsHub({
     const aggTarget = agg?.enabled ? agg.settings?.target : undefined;
     const t = target ?? aggTarget;
     if (!t) return "Keep";
-    if (t === USDC) return "Cashout";
     if (t === parent) return "Compound";
     return "Swap for $" + symbolOf(t);
   };
@@ -5174,15 +5177,19 @@ function DripScreen({
       r.mint === mint &&
       (kind === "drip" || r.settings?.payout === payout),
   );
-  type Choice = "keep" | "buyback" | "cash" | "other";
+  // Cashing out is a swap into a stablecoin: a rule that targets USDC opens
+  // as a Swap with USDC picked.
+  type Choice = "keep" | "buyback" | "other";
   const current: { choice: Choice; other: string | null } =
     !rule?.enabled || !rule.settings?.target
       ? { choice: "keep", other: null }
-      : rule.settings.target === USDC
-        ? { choice: "cash", other: null }
-        : kind === "drip-from" && rule.settings.target === mint
-          ? { choice: "buyback", other: null }
-          : { choice: "other", other: rule.settings.target };
+      : kind === "drip-from" && rule.settings.target === mint
+        ? { choice: "buyback", other: null }
+        : { choice: "other", other: rule.settings.target };
+  const knownSymbol = (target: string) =>
+    holdings.find((h) => h.asset.mint === target)?.asset.symbol ??
+    DRIP_STABLES.find((s) => s.mint === target)?.symbol ??
+    target.slice(0, 5);
   const [choice, setChoice] = useState<Choice>(current.choice);
   // How much has to pile up before a swap: the platform minimum ($1), or the
   // rule's own figure above it. `custom` is the typed figure, null for the
@@ -5214,9 +5221,7 @@ function DripScreen({
     current.other
       ? {
           mint: current.other,
-          symbol:
-            holdings.find((h) => h.asset.mint === current.other)?.asset
-              .symbol ?? current.other.slice(0, 5),
+          symbol: knownSymbol(current.other),
           asset: holdings.find((h) => h.asset.mint === current.other)?.asset,
         }
       : null,
@@ -5314,11 +5319,9 @@ function DripScreen({
   const target =
     choice === "buyback"
       ? mint
-      : choice === "cash"
-        ? USDC
-        : choice === "other"
-          ? (other?.mint ?? null)
-          : null;
+      : choice === "other"
+        ? (other?.mint ?? null)
+        : null;
   const changed =
     choice !== current.choice ||
     (choice === "other" && other?.mint !== current.other) ||
@@ -5374,9 +5377,7 @@ function DripScreen({
               symbol +
               " will buy back $" +
               symbol
-            : choice === "cash"
-              ? "$" + payoutSymbol + " dividends will be cashed out to USDC"
-              : "$" + payoutSymbol + " dividends will buy $" + other!.symbol,
+            : "$" + payoutSymbol + " dividends will buy $" + other!.symbol,
       );
       a.back();
     } catch (e) {
@@ -5504,9 +5505,7 @@ function DripScreen({
           {kind === "drip-from"
             ? option("buyback", "Compound", "Reinvest into $" + symbol)
             : null}
-          {/* Dividends already paid in cash have nothing to cash out to. */}
-          {payout === USDC ? null : option("cash", "Cashout", "Swap for USDC")}
-          {option("other", "Swap", "Pick any other asset")}
+          {option("other", "Swap", "Any asset, stablecoins included")}
           {choice === "other" ? (
             other ? (
               <View
@@ -5537,7 +5536,34 @@ function DripScreen({
                 </Pressable>
               </View>
             ) : (
-              searchBar(false)
+              <View style={{ gap: 8 }}>
+                {searchBar(false)}
+                <View style={[m.row, { gap: 8 }]}>
+                  {DRIP_STABLES.filter((s) => s.mint !== payout).map((s) => (
+                    <Pressable
+                      key={s.mint}
+                      accessibilityRole="button"
+                      accessibilityLabel={"Swap into " + s.symbol}
+                      onPress={() => setOther({ mint: s.mint, symbol: s.symbol })}
+                      style={({ pressed }) => [
+                        m.row,
+                        {
+                          gap: 6,
+                          height: 36,
+                          paddingHorizontal: 14,
+                          borderRadius: 18,
+                          backgroundColor: colors.surface,
+                          borderWidth: 1,
+                          borderColor: colors.line,
+                          opacity: pressed ? 0.6 : 1,
+                        },
+                      ]}
+                    >
+                      <Text style={[m.text, { fontFamily: fonts.medium }]}>{s.symbol}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
             )
           ) : null}
         </View>
@@ -5756,18 +5782,17 @@ function DripScreen({
     </View>
   );
 }
-/** "Compound ZCAT", "Cashout ZCAT", "Swap ZCAT": a drip named after the token whose dividends it used. */
+/** "Compound ZCAT", "Swap ZCAT": a drip named after the token whose dividends it used (a cash-out is a swap into USDC). */
 const dripTitle = (r: Activity) => {
   const d = r.drip!;
   const of = d.sourceSymbol ?? d.payoutSymbol;
-  return (
-    (d.kind === "buyback"
-      ? "Compound "
-      : d.kind === "cashout"
-        ? "Cashout "
-        : "Swap ") + of
-  );
+  return (d.kind === "buyback" ? "Compound " : "Swap ") + of;
 };
+/** The stablecoins a drip can swap into with one tap (classic SPL tokens). */
+const DRIP_STABLES = [
+  { mint: USDC, symbol: "USDC" },
+  { mint: "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", symbol: "USDT" },
+];
 const tokenQtyText = (v: string | number) =>
   Number(v).toLocaleString("en-US", { maximumSignificantDigits: 6 });
 /**
@@ -5835,11 +5860,7 @@ function DripDetail({ row }: { row: Activity }) {
             {a.hidden ? "••••" : tokenQtyText(row.amount) + " " + row.symbol}
           </Text>
           <Text style={m.muted}>
-            {d.kind === "buyback"
-              ? "Bought back"
-              : d.kind === "cashout"
-                ? "Cashed out"
-                : "Bought"}{" "}
+            {d.kind === "buyback" ? "Bought back" : "Bought"}{" "}
             · {a.hidden ? "••••" : usd(row.usd)}
           </Text>
         </View>
@@ -5872,7 +5893,7 @@ function DripDetail({ row }: { row: Activity }) {
             )
           : null}
         {line(
-          d.kind === "cashout" ? "Cashed out to" : "Bought",
+          "Bought",
           a.hidden ? "••••" : tokenQtyText(row.amount) + " " + row.symbol,
           () => a.nav({ type: "asset", mint: row.mint }),
         )}
@@ -6098,12 +6119,7 @@ function ActivityScreen({
                   },
                 ]}
               >
-                {figure?.count
-                  ? "over " +
-                    figure.count +
-                    " payout" +
-                    (figure.count === 1 ? "" : "s")
-                  : "No payouts yet"}
+                {figure?.count ? "" : "No payouts yet"}
               </Text>
             </View>
           </>
