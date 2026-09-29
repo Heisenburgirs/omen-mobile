@@ -778,6 +778,7 @@ export function AssetRow({
   hidden,
   plain = false,
   metric,
+  drip,
 }: {
   asset: Asset;
   holding?: Holding;
@@ -786,6 +787,11 @@ export function AssetRow({
   plain?: boolean;
   /** Figure for the second line; defaults to market cap. */
   metric?: string;
+  /**
+   * A holding's dividend setting: the payout mark reads white with a check
+   * while its dividends are automated, and a tap on it opens the setting.
+   */
+  drip?: { on: boolean; onPress: () => void };
 }) {
   const small = plain && { fontSize: 11, lineHeight: 16 };
   return (
@@ -826,18 +832,39 @@ export function AssetRow({
               : (metric ?? assetMarketSummary(asset))}
           </Text>
           {asset.stonk?.kind === "reward" ? (
-            <View
-              accessibilityLabel={"Pays " + (asset.stonk.payoutSymbol || "rewards")}
-              style={{ flexDirection: "row", alignItems: "center", gap: 3 }}
-            >
-              <Icon name="payout" size={11} color={colors.muted} />
-              <Text
-                numberOfLines={1}
-                style={[m.muted, { fontSize: 11, lineHeight: 14 }, small]}
+            drip ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={
+                  "Pays " + (asset.stonk.payoutSymbol || "rewards") + (drip.on ? ", automated. Change" : ". Automate")
+                }
+                hitSlop={10}
+                onPress={drip.onPress}
+                style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", gap: 3, opacity: pressed ? 0.6 : 1 })}
               >
-                {asset.stonk.payoutSymbol || "rewards"}
-              </Text>
-            </View>
+                <Icon name="payout" size={11} color={drip.on ? colors.ice : colors.muted} />
+                <Text
+                  numberOfLines={1}
+                  style={[m.muted, { fontSize: 11, lineHeight: 14 }, small, drip.on && { color: colors.ice }]}
+                >
+                  {asset.stonk.payoutSymbol || "rewards"}
+                </Text>
+                {drip.on ? <Icon name="check" size={10} color={colors.ice} /> : null}
+              </Pressable>
+            ) : (
+              <View
+                accessibilityLabel={"Pays " + (asset.stonk.payoutSymbol || "rewards")}
+                style={{ flexDirection: "row", alignItems: "center", gap: 3 }}
+              >
+                <Icon name="payout" size={11} color={colors.muted} />
+                <Text
+                  numberOfLines={1}
+                  style={[m.muted, { fontSize: 11, lineHeight: 14 }, small]}
+                >
+                  {asset.stonk.payoutSymbol || "rewards"}
+                </Text>
+              </View>
+            )
           ) : null}
         </View>
       </View>

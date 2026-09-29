@@ -348,6 +348,62 @@ export function MarketShell(props: MarketShellProps) {
     if (me.data && watches.isError) void watches.refetch();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [me.data]);
+  // Dividend automation, shared by every place that shows or changes it: the
+  // rules, the one sheet they are changed in (opened with `openDrip`), and
+  // "auto-compound all", a setting on this phone that gives every dividend
+  // token held (now, and each one bought later) a compound rule.
+  const chainActions = useChainActions();
+  const dripRules = useMobile<DripRule[]>("strategies", {}, !guest, 60000);
+  const [dripSubject, setDripSubject] = useState<DripSubject | null>(null);
+  const autoKey = "omen.drip.auto." + props.address;
+  const [autoAll, setAutoAllState] = useState(false);
+  useEffect(() => {
+    void SecureStore.getItemAsync(autoKey)
+      .then((v) => setAutoAllState(v === "true"))
+      .catch(() => undefined);
+  }, [autoKey]);
+  const setAutoCompoundAll = (on: boolean) => {
+    setAutoAllState(on);
+    void SecureStore.setItemAsync(autoKey, String(on)).catch(() => undefined);
+    if (on) showToast("Dividends will auto-compound into the tokens that pay them");
+  };
+  const dripConfig = useMobile<DripConfig>("drip-config", {}, !guest && autoAll, 0);
+  // Tokens already given a rule (or tried) this session, so a failure is not retried in a loop.
+  const autoTried = useRef(new Set<string>());
+  useEffect(() => {
+    if (!autoAll || guest || !positions.data || !dripRules.data || !dripConfig.data) return;
+    const supported = new Set((dripConfig.data.data.payouts ?? []).map((x) => x.mint));
+    const rules = dripRules.data.data ?? [];
+    const due = positions.data.data.holdings.filter((h) => {
+      const payout = h.asset.stonk?.kind === "reward" ? h.asset.stonk.payoutMint : null;
+      return (
+        payout &&
+        supported.has(payout) &&
+        !autoTried.current.has(h.asset.mint) &&
+        !rules.some((r) => r.kind === "drip-from" && r.mint === h.asset.mint && r.settings?.payout === payout) &&
+        !dripStatus(rules, h.asset.mint, payout).on
+      );
+    });
+    if (!due.length) return;
+    void (async () => {
+      let added = 0;
+      for (const h of due) {
+        autoTried.current.add(h.asset.mint);
+        const ok = await saveDripRule({ positions, action }, chainActions, rules, {
+          mint: h.asset.mint,
+          payout: h.asset.stonk!.payoutMint!,
+          enabled: true,
+          target: h.asset.mint,
+        }).catch(() => false);
+        if (ok) added += 1;
+      }
+      if (added) {
+        showToast("Auto-compounding " + added + " more dividend token" + (added === 1 ? "" : "s"));
+        void dripRules.refetch();
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoAll, positions.data, dripRules.data, dripConfig.data]);
   // A popped screen stays mounted while it slides out; `closing` marks it.
   const [closing, setClosing] = useState(false);
   const nav = (r: Route) => {
@@ -490,6 +546,10 @@ export function MarketShell(props: MarketShellProps) {
         action,
         setLocked,
         dialog,
+        dripRules,
+        openDrip: (subject: DripSubject) => (guest ? askSignIn() : setDripSubject(subject)),
+        autoCompoundAll: autoAll,
+        setAutoCompoundAll,
         openLink: (url: string) => {
           const safe = safeUrl(url);
           if (safe) nav({ type: "browser", url: safe });
@@ -635,6 +695,7 @@ export function MarketShell(props: MarketShellProps) {
           visible={sheetVisible}
           onClose={() => setSheetVisible(false)}
         />
+        <DripSheet subject={dripSubject} onClose={() => setDripSubject(null)} />
       </SafeAreaView>
     </Context.Provider>
   );
@@ -2427,6 +2488,31 @@ function AssetScreen({ mint, active }: { mint: string; active: boolean }) {
         useNativeDriver: true,
       }).start();
       setTimeout(closeDock, 1400);
+      // Bought a token that pays dividends and nothing is set for them: ask
+      // once, the moment it matters, in the drip sheet (auto-compound
+      // preselected). With "auto-compound all" on there is nothing to ask;
+      // the rule is added once the holding shows up.
+      const payout = asset?.stonk?.kind === "reward" ? asset.stonk.payoutMint : null;
+      if (which === "buy" && asset && payout && !a.autoCompoundAll && !dripStatus(a.dripRules?.data?.data, mint, payout).on) {
+        const askedKey = "omen.drip.asked." + mint;
+        void SecureStore.getItemAsync(askedKey)
+          .then((asked) => {
+            if (asked) return;
+            void SecureStore.setItemAsync(askedKey, "1").catch(() => undefined);
+            setTimeout(
+              () =>
+                a.openDrip({
+                  mint,
+                  symbol: asset.symbol,
+                  payout,
+                  payoutSymbol: asset.stonk?.payoutSymbol || "rewards",
+                  intro: true,
+                }),
+              1700,
+            );
+          })
+          .catch(() => undefined);
+      }
     } catch (e) {
       // Back to the form, with the slider's shake and the reason in a toast.
       if (!reduceMotion)
@@ -2815,7 +2901,18 @@ function AssetScreen({ mint, active }: { mint: string; active: boolean }) {
                       </Text>
                     ) : null}
                   </View>
-                  <Icon name="chevron" size={18} color={colors.muted} />
+                  {/* What its dividends do, as a pill that changes it in one
+                      sheet; the rest of the card opens the history. */}
+                  {asset.stonk?.kind === "reward" && asset.stonk.payoutMint && !a.guest ? (
+                    <DripPill
+                      mint={mint}
+                      symbol={asset.symbol}
+                      payout={asset.stonk.payoutMint}
+                      payoutSymbol={asset.stonk.payoutSymbol || "rewards"}
+                    />
+                  ) : (
+                    <Icon name="chevron" size={18} color={colors.muted} />
+                  )}
                 </Pressable>
               ) : asset.payers?.length ? (
                 // A payout token: the tokens that pay dividends in it, as a
@@ -4117,15 +4214,32 @@ function PortfolioContent({
           a.nav({ type: "asset", mint: cash[0]?.asset.mint ?? USDC })
         }
       />
-      {rest.map((h) => (
-        <AssetRow
-          key={h.asset.mint}
-          asset={h.asset}
-          holding={h}
-          hidden={hidden}
-          onPress={() => a.nav({ type: "asset", mint: h.asset.mint })}
-        />
-      ))}
+      {rest.map((h) => {
+        const payout = h.asset.stonk?.kind === "reward" ? h.asset.stonk.payoutMint : null;
+        return (
+          <AssetRow
+            key={h.asset.mint}
+            asset={h.asset}
+            holding={h}
+            hidden={hidden}
+            onPress={() => a.nav({ type: "asset", mint: h.asset.mint })}
+            {...(payout && !a.guest
+              ? {
+                  drip: {
+                    on: dripStatus(a.dripRules?.data?.data, h.asset.mint, payout).on,
+                    onPress: () =>
+                      a.openDrip({
+                        mint: h.asset.mint,
+                        symbol: h.asset.symbol,
+                        payout,
+                        payoutSymbol: h.asset.stonk?.payoutSymbol || "rewards",
+                      }),
+                  },
+                }
+              : {})}
+          />
+        );
+      })}
       {q.data && !rest.length ? <Empty title="No assets yet" plain /> : null}
     </LoadState>
   );
@@ -4725,10 +4839,9 @@ function DividendsHub({
         r.mint === mint &&
         (kind === "drip" || r.settings?.payout === payout),
     );
+  // Manage opens the one drip sheet, as the token page and portfolio do.
   const manage = (x: (typeof payers)[number]) =>
-    a.nav({
-      type: "drip",
-      kind: "drip-from",
+    a.openDrip({
       mint: x.holding.asset.mint,
       symbol: x.holding.asset.symbol,
       payout: x.payoutMint,
@@ -5151,6 +5264,366 @@ function PaidInGroup({
  * holding's share of them) should become. Four answers; the last opens a
  * search for the token to buy. Save writes the rule and closes.
  */
+/**
+ * What a token's dividends are set to do: its own rule (dividends from this
+ * token), else the rule on its payout token (every dividend in, say, ZEC).
+ * `via` says which, so the sheet can say when a token follows the latter.
+ */
+function dripStatus(rules: DripRule[] | undefined, mint: string, payout: string | null | undefined) {
+  if (!payout) return { on: false, target: null as string | null, compound: false, via: null as "own" | "all" | null, minUsd: null as number | null };
+  const own = rules?.find((r) => r.kind === "drip-from" && r.mint === mint && r.settings?.payout === payout && r.enabled);
+  const all = rules?.find((r) => r.kind === "drip" && r.mint === payout && r.enabled);
+  const rule = own ?? all;
+  const target = rule?.settings?.target ?? null;
+  return {
+    on: Boolean(rule),
+    target,
+    compound: Boolean(own) && target === mint,
+    via: own ? ("own" as const) : all ? ("all" as const) : null,
+    minUsd: rule?.settings?.minUsd ?? null,
+  };
+}
+
+/** A few words for a status pill: "Compounding", "→ USDC", "Keep". */
+function dripPillText(status: ReturnType<typeof dripStatus>, symbolOf: (mint: string) => string): string {
+  if (!status.on || !status.target) return "Keep";
+  if (status.compound) return "Compounding";
+  return "→ " + symbolOf(status.target);
+}
+
+/**
+ * Turns a token's dividend rule on, off or to a new target. A rule runs in
+ * each wallet the dividends land in: every wallet holding the token when it
+ * is switched on (all wallets when none holds it yet), and every wallet that
+ * has the rule when it is switched off. The reinvestor signs on the server
+ * with its own narrow signer, attached the first time a rule is switched on.
+ */
+async function saveDripRule(
+  a: any,
+  actions: ReturnType<typeof useChainActions>,
+  rules: DripRule[],
+  input: { mint: string; payout: string; enabled: boolean; target: string | null; minUsd?: number },
+): Promise<boolean> {
+  const kind = "drip-from";
+  const book: Portfolio | undefined = a.positions.data?.data;
+  const held =
+    book?.holdings
+      .find((h) => h.asset.mint === input.mint)
+      ?.wallets?.filter((w) => BigInt(w.raw) > 0n)
+      .map((w) => w.address) ?? [];
+  const all = book?.wallets?.map((w) => w.address) ?? [];
+  const existing = rules.filter((r) => r.kind === kind && r.mint === input.mint && r.settings?.payout === input.payout);
+  const having = existing.filter((r) => r.wallet).map((r) => r.wallet!);
+  const previous = existing[0]?.settings?.target;
+  const wallets: (string | undefined)[] = [...new Set(input.enabled ? (held.length ? held : all) : having)];
+  for (const wallet of wallets.length ? wallets : [undefined]) {
+    if (input.enabled) await actions.ensureDripSigner(wallet);
+    const ok = await a.action("strategies", {
+      mint: input.mint,
+      kind,
+      enabled: input.enabled,
+      ...(wallet ? { wallet } : {}),
+      settings: {
+        target: input.enabled ? input.target : previous,
+        payout: input.payout,
+        ...(input.enabled && input.minUsd ? { minUsd: input.minUsd } : {}),
+        includeExisting: true,
+      },
+    });
+    if (!ok) return false;
+  }
+  return true;
+}
+
+/** A token's dividend setting as a pill ("Automate", "Compounding", "→ USDC") that opens the drip sheet. */
+function DripPill({ mint, symbol, payout, payoutSymbol }: { mint: string; symbol: string; payout: string; payoutSymbol: string }) {
+  const a = useApp();
+  const status = dripStatus(a.dripRules?.data?.data, mint, payout);
+  const holdings: Holding[] = a.positions.data?.data.holdings ?? [];
+  const symbolOf = (m: string) =>
+    DRIP_STABLES.find((x) => x.mint === m)?.symbol ?? holdings.find((h) => h.asset.mint === m)?.asset.symbol ?? m.slice(0, 4);
+  const on = status.on;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={on ? symbol + " dividends: " + dripPillText(status, symbolOf) + ". Change" : "Automate " + symbol + " dividends"}
+      hitSlop={6}
+      onPress={() => a.openDrip({ mint, symbol, payout, payoutSymbol })}
+      style={({ pressed }) => [
+        m.row,
+        {
+          gap: 5,
+          height: 32,
+          paddingHorizontal: 12,
+          borderRadius: 16,
+          backgroundColor: on ? colors.ice : colors.surfaceRaised,
+          opacity: pressed ? 0.7 : 1,
+        },
+      ]}
+    >
+      {on ? <Icon name="check" size={13} color={colors.canvas} /> : null}
+      <Text style={[m.text, { fontFamily: fonts.medium, fontSize: 13, color: on ? colors.canvas : colors.ice }]}>
+        {on ? dripPillText(status, symbolOf) : "Automate"}
+      </Text>
+    </Pressable>
+  );
+}
+
+/** What the drip sheet is about: a token that pays dividends, and what it pays in. */
+type DripSubject = { mint: string; symbol: string; payout: string; payoutSymbol: string; intro?: boolean };
+
+/**
+ * Dividend automation in one sheet, opened from wherever the token is (its
+ * page, its portfolio row, the moment after a buy): keep, auto-compound
+ * into the token, or swap into another asset (stablecoins one tap). The
+ * threshold hides behind "edit"; new strategies are new rows here.
+ */
+function DripSheet({ subject, onClose }: { subject: DripSubject | null; onClose: () => void }) {
+  const a = useApp();
+  const actions = useChainActions();
+  const visible = Boolean(subject);
+  const config = useMobile<DripConfig>("drip-config", {}, visible, 0);
+  const rules: DripRule[] = a.dripRules?.data?.data ?? [];
+  const floorUsd = config.data?.data.minUsd ?? 1;
+  const supported = !config.data || (config.data.data.payouts ?? []).some((p) => p.mint === subject?.payout);
+  const status = dripStatus(rules, subject?.mint ?? "", subject?.payout);
+  type Pick = "keep" | "compound" | "swap";
+  const currentPick: Pick = !status.on ? "keep" : status.compound ? "compound" : "swap";
+  const [pick, setPick] = useState<Pick>("compound");
+  const [other, setOther] = useState<{ mint: string; symbol: string } | null>(null);
+  const [q, setQ] = useState("");
+  const [search, setSearch] = useState("");
+  const [editMin, setEditMin] = useState(false);
+  const [minText, setMinText] = useState("");
+  const [saving, setSaving] = useState(false);
+  const holdings: Holding[] = a.positions.data?.data.holdings ?? [];
+  const symbolOf = (mint: string) =>
+    DRIP_STABLES.find((s) => s.mint === mint)?.symbol ??
+    holdings.find((h) => h.asset.mint === mint)?.asset.symbol ??
+    mint.slice(0, 4);
+  // Each opening starts from the saved answer, once the rules are in (not
+  // again when they refresh, which would undo a choice being made); a token
+  // with none starts on Auto-compound, the choice most people make.
+  const initialised = useRef<string | null>(null);
+  useEffect(() => {
+    if (!subject) {
+      initialised.current = null;
+      return;
+    }
+    const key = subject.mint + ":" + subject.payout;
+    if (initialised.current === key || !a.dripRules?.data) return;
+    initialised.current = key;
+    setPick(status.on ? currentPick : "compound");
+    setOther(status.on && !status.compound && status.target ? { mint: status.target, symbol: symbolOf(status.target) } : null);
+    setQ("");
+    setSearch("");
+    setEditMin(false);
+    setMinText(status.minUsd && status.minUsd > floorUsd ? String(status.minUsd) : "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subject?.mint, subject?.payout, Boolean(a.dripRules?.data)]);
+  useEffect(() => {
+    const timer = setTimeout(() => setSearch(q.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [q]);
+  const results = useMobile<Asset[]>("assets", { scope: "stonk", q: search, cursor: "0", chain: "only" }, visible && pick === "swap" && search.length >= 2, 0);
+  const local = useMobile<Asset[]>("assets", { scope: "stonk", q: search, cursor: "0", chain: "skip" }, visible && pick === "swap" && search.length >= 2, 0);
+  if (!subject) return <OmenSheet visible={false} onClose={onClose} title=""><View /></OmenSheet>;
+
+  const minNumber = Number(minText.replace(",", "."));
+  const minOk = !minText || (Number.isFinite(minNumber) && minNumber >= floorUsd && minNumber <= 1_000_000);
+  const minUsd = minText && minOk ? Math.round(minNumber * 100) / 100 : floorUsd;
+  const target = pick === "compound" ? subject.mint : pick === "swap" ? (other?.mint ?? null) : null;
+  const changed =
+    pick !== currentPick ||
+    (pick === "swap" && other?.mint !== status.target) ||
+    (pick !== "keep" && minUsd !== Math.max(floorUsd, status.minUsd ?? floorUsd));
+  const valid = pick === "keep" ? status.via === "own" : Boolean(target && target !== subject.payout) && minOk;
+  const label = saving
+    ? "Saving…"
+    : pick === "keep"
+      ? status.on
+        ? status.via === "all"
+          ? "Follows your $" + subject.payoutSymbol + " rule"
+          : "Turn off"
+        : "Keeping as $" + subject.payoutSymbol
+      : !status.on
+        ? "Turn on"
+        : changed
+          ? "Save"
+          : "On";
+  const save = async () => {
+    if (saving || !changed || !valid) return;
+    setSaving(true);
+    try {
+      const ok = await saveDripRule(a, actions, rules, {
+        mint: subject.mint,
+        payout: subject.payout,
+        enabled: pick !== "keep",
+        target,
+        minUsd,
+      });
+      if (!ok) return;
+      showToast(
+        pick === "keep"
+          ? "$" + subject.payoutSymbol + " dividends from $" + subject.symbol + " stay as $" + subject.payoutSymbol
+          : pick === "compound"
+            ? "Auto-compounding $" + subject.symbol + " dividends"
+            : "$" + subject.payoutSymbol + " dividends from $" + subject.symbol + " will buy $" + (other?.symbol ?? ""),
+      );
+      void a.dripRules?.refetch?.();
+      onClose();
+    } catch (e) {
+      showErrorToast(errorMessage(e));
+    } finally {
+      setSaving(false);
+    }
+  };
+  const option = (value: Pick, title: string, body: string) => {
+    const on = pick === value;
+    return (
+      <Pressable
+        key={value}
+        accessibilityRole="radio"
+        accessibilityState={{ selected: on }}
+        onPress={() => setPick(value)}
+        style={({ pressed }) => [s.dripOption, on && s.dripOptionOn, { opacity: pressed ? 0.7 : 1 }]}
+      >
+        <View style={[s.dripRadio, on && { borderColor: colors.ice }]}>{on ? <View style={s.dripRadioDot} /> : null}</View>
+        <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
+          <Text style={[m.text, { fontFamily: fonts.medium, fontSize: 15 }]}>{title}</Text>
+          <Text style={[m.muted, { fontSize: 12, lineHeight: 16 }]}>{body}</Text>
+        </View>
+      </Pressable>
+    );
+  };
+  const found = [...(results.data?.data ?? []), ...(local.data?.data ?? [])]
+    .filter((x, i, list) => x.mint !== subject.payout && list.findIndex((y) => y.mint === x.mint) === i)
+    .slice(0, 5);
+  const pill = (mint: string, symbol: string) => {
+    const on = other?.mint === mint;
+    return (
+      <Pressable
+        key={mint}
+        accessibilityRole="button"
+        accessibilityState={{ selected: on }}
+        onPress={() => {
+          setOther({ mint, symbol });
+          setQ("");
+          setSearch("");
+        }}
+        style={({ pressed }) => [
+          m.row,
+          {
+            gap: 6,
+            height: 34,
+            paddingHorizontal: 14,
+            borderRadius: 17,
+            backgroundColor: on ? colors.ice : colors.surface,
+            borderWidth: 1,
+            borderColor: on ? colors.ice : colors.line,
+            opacity: pressed ? 0.6 : 1,
+          },
+        ]}
+      >
+        <Text style={[m.text, { fontFamily: fonts.medium, fontSize: 13, color: on ? colors.canvas : colors.ice }]}>{symbol}</Text>
+      </Pressable>
+    );
+  };
+  return (
+    <OmenSheet
+      visible={visible}
+      onClose={() => !saving && onClose()}
+      title={subject.intro ? "$" + subject.symbol + " pays dividends" : "$" + subject.symbol + " dividends"}
+    >
+      <View style={{ gap: 10, paddingHorizontal: 24, paddingBottom: 12 }}>
+        <Text style={m.muted}>
+          {subject.intro
+            ? "It pays you in $" + subject.payoutSymbol + ". Auto-compound them into more $" + subject.symbol + "?"
+            : "Paid to you in $" + subject.payoutSymbol + "."}
+        </Text>
+        {!supported ? (
+          <Text style={[m.text, { color: colors.mist }]}>{"Automating $" + subject.payoutSymbol + " dividends isn't available yet."}</Text>
+        ) : (
+          <>
+            {option("compound", "Auto-compound", "Buy more $" + subject.symbol)}
+            {option("swap", "Swap", "Into a stablecoin or any asset")}
+            {pick === "swap" ? (
+              <View style={{ gap: 8 }}>
+                <View style={[m.row, { gap: 8, flexWrap: "wrap" }]}>
+                  {DRIP_STABLES.filter((st) => st.mint !== subject.payout).map((st) => pill(st.mint, st.symbol))}
+                  {other && !DRIP_STABLES.some((st) => st.mint === other.mint) ? pill(other.mint, other.symbol) : null}
+                </View>
+                <View style={[m.row, s.dripSearch]}>
+                  <Icon name="search" size={16} color={colors.muted} />
+                  <Field
+                    accessibilityLabel="Search an asset"
+                    placeholder="Or search an asset…"
+                    value={q}
+                    onChangeText={setQ}
+                    maxLength={80}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    style={{ flex: 1, minWidth: 0, paddingHorizontal: 0, borderWidth: 0, backgroundColor: "transparent" }}
+                  />
+                </View>
+                {search.length >= 2
+                  ? found.length
+                    ? found.map((x) => (
+                        <Pressable
+                          key={x.mint}
+                          accessibilityRole="button"
+                          onPress={() => {
+                            setOther({ mint: x.mint, symbol: x.symbol });
+                            setQ("");
+                            setSearch("");
+                          }}
+                          style={({ pressed }) => [m.row, { gap: 10, minHeight: 44, opacity: pressed ? 0.6 : 1 }]}
+                        >
+                          <AssetIcon asset={x} size={26} />
+                          <Text style={[m.text, { fontFamily: fonts.medium }]}>{x.symbol}</Text>
+                          <Text numberOfLines={1} style={[m.muted, { flex: 1 }]}>
+                            {x.name}
+                          </Text>
+                        </Pressable>
+                      ))
+                    : results.isPending || local.isPending
+                      ? <SkeletonRows count={2} plain />
+                      : <Text style={m.muted}>Nothing found.</Text>
+                  : null}
+              </View>
+            ) : null}
+            {option("keep", "Keep", "Stays as $" + subject.payoutSymbol)}
+            {pick !== "keep" ? (
+              editMin ? (
+                <View style={[m.row, { gap: 8 }]}>
+                  <Text style={m.muted}>Run once dividends reach $</Text>
+                  <Field
+                    accessibilityLabel="Dividends to wait for, in dollars"
+                    placeholder={String(floorUsd)}
+                    value={minText}
+                    onChangeText={(v) => setMinText(v.replace(/[^0-9.,]/g, "").slice(0, 9))}
+                    keyboardType="decimal-pad"
+                    autoFocus
+                    style={{ width: 90, minHeight: 36 }}
+                  />
+                </View>
+              ) : (
+                <Pressable accessibilityRole="button" onPress={() => setEditMin(true)} hitSlop={6}>
+                  <Text style={m.muted}>
+                    Runs once {usd(minUsd)} has built up · <Text style={{ color: colors.ice }}>edit</Text>
+                  </Text>
+                </Pressable>
+              )
+            ) : null}
+            {!minOk ? <Text style={[m.muted, { color: colors.error }]}>At least {usd(floorUsd)}.</Text> : null}
+            <Button title={label} busy={saving} disabled={saving || !changed || !valid} onPress={() => void save()} />
+          </>
+        )}
+      </View>
+    </OmenSheet>
+  );
+}
+
 function DripScreen({
   kind,
   mint,
@@ -6791,6 +7264,45 @@ function Settings() {
               height: 18,
               borderRadius: 9,
               backgroundColor: a.hidden ? colors.canvas : colors.muted,
+            }}
+          />
+        </View>
+      </Pressable>
+      {/* One switch for every dividend token: each one held now and each
+          one bought later gets an auto-compound rule; any token can still be
+          set otherwise from its page. Off stops adding rules and leaves the
+          ones there. */}
+      <Pressable
+        accessibilityRole="switch"
+        accessibilityLabel="Auto-compound dividends"
+        accessibilityState={{ checked: Boolean(a.autoCompoundAll) }}
+        onPress={() => a.setAutoCompoundAll(!a.autoCompoundAll)}
+        style={[m.between, { minHeight: 56, gap: 16 }]}
+      >
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={[m.text, { fontFamily: fonts.medium }]}>Auto-compound dividends</Text>
+          <Text style={[m.muted, { fontSize: 12, lineHeight: 16 }]}>
+            Every dividend token you hold or buy compounds into itself. Change any token from its page.
+          </Text>
+        </View>
+        <View
+          style={{
+            width: 44,
+            height: 26,
+            borderRadius: 13,
+            padding: 3,
+            borderWidth: 1,
+            borderColor: a.autoCompoundAll ? colors.ice : colors.line,
+            backgroundColor: a.autoCompoundAll ? colors.ice : colors.card,
+            alignItems: a.autoCompoundAll ? "flex-end" : "flex-start",
+          }}
+        >
+          <View
+            style={{
+              width: 18,
+              height: 18,
+              borderRadius: 9,
+              backgroundColor: a.autoCompoundAll ? colors.canvas : colors.muted,
             }}
           />
         </View>
