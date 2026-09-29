@@ -26,7 +26,6 @@ const config: ExpoConfig = {
       backgroundColor: "#070707",
     },
     blockedPermissions: [
-      "android.permission.RECORD_AUDIO",
       "android.permission.READ_MEDIA_IMAGES",
       "android.permission.READ_MEDIA_VIDEO",
     ],
