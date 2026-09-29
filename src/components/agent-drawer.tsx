@@ -2,9 +2,8 @@ import React, { useEffect, useRef, useState } from "react";
 import { Animated, Dimensions, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Icon, m } from "./market-ui";
-import { RaisedButton as Button } from "./raised-button";
 import { usd } from "../domain/market";
-import { tradingColors as colors, tradingFonts as fonts, chatFonts, space } from "../theme";
+import { tradingColors as colors, tradingFonts as fonts, chatFonts } from "../theme";
 import type { Conversation } from "../agent/store";
 
 const DAY = 86_400_000;
@@ -17,8 +16,8 @@ function when(ms: number): string {
 }
 
 /**
- * The agent's side menu, sliding in from the left: its balance and Fund at
- * the top, then a new conversation and the past ones, newest first.
+ * The agent's side menu, half the screen wide: the balance with Fund beside
+ * it, a new conversation, and the past ones, newest first.
  */
 export function AgentDrawer({
   visible,
@@ -42,15 +41,15 @@ export function AgentDrawer({
   onNew: () => void;
 }) {
   const insets = useSafeAreaInsets();
-  const width = Math.min(340, Dimensions.get("window").width * 0.84);
+  const width = Math.round(Dimensions.get("window").width * 0.5);
   const x = useRef(new Animated.Value(-width)).current;
   const [mounted, setMounted] = useState(visible);
   useEffect(() => {
     if (visible) {
       setMounted(true);
-      Animated.timing(x, { toValue: 0, duration: 220, useNativeDriver: true }).start();
+      Animated.timing(x, { toValue: 0, duration: 200, useNativeDriver: true }).start();
     } else {
-      Animated.timing(x, { toValue: -width, duration: 180, useNativeDriver: true }).start(() => setMounted(false));
+      Animated.timing(x, { toValue: -width, duration: 170, useNativeDriver: true }).start(() => setMounted(false));
     }
   }, [visible, width, x]);
   if (!mounted) return null;
@@ -65,46 +64,52 @@ export function AgentDrawer({
         <Animated.View
           style={[
             s.panel,
-            { width, paddingTop: insets.top + 16, paddingBottom: insets.bottom + 16, transform: [{ translateX: x }] },
+            { width, paddingTop: insets.top + 18, paddingBottom: insets.bottom + 12, transform: [{ translateX: x }] },
           ]}
         >
-          <View style={s.balance}>
-            <Text style={m.label}>Agent balance</Text>
-            <Text numberOfLines={1} style={s.amount}>
+          <Text style={m.label}>Agent balance</Text>
+          <View style={s.balanceRow}>
+            <Text numberOfLines={1} adjustsFontSizeToFit style={s.amount}>
               {hidden ? "••••" : usd(balanceUsd)}
             </Text>
-            <Button title="Fund" onPress={onFund} />
+            <Pressable
+              accessibilityRole="button"
+              onPress={onFund}
+              hitSlop={8}
+              style={({ pressed }) => [s.fund, { opacity: pressed ? 0.6 : 1 }]}
+            >
+              <Text style={s.fundText}>Fund</Text>
+            </Pressable>
           </View>
+
+          <View style={s.divider} />
 
           <Pressable
             accessibilityRole="button"
             onPress={onNew}
-            style={({ pressed }) => [s.row, s.newRow, { opacity: pressed ? 0.6 : 1 }]}
+            style={({ pressed }) => [s.row, { opacity: pressed ? 0.6 : 1 }]}
           >
-            <Icon name="compose" size={18} color={colors.ice} />
-            <Text style={s.newText}>New conversation</Text>
+            <Icon name="compose" size={16} color={colors.ice} />
+            <Text numberOfLines={1} style={s.newText}>
+              New conversation
+            </Text>
           </Pressable>
 
-          <Text style={[m.label, { marginTop: 18, marginBottom: 6, paddingHorizontal: 4 }]}>Conversations</Text>
-          <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
-            {conversations.length ? (
-              conversations.map((c) => (
-                <Pressable
-                  key={c.id}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: c.id === currentId }}
-                  onPress={() => onSelect(c.id)}
-                  style={({ pressed }) => [s.row, c.id === currentId && s.current, { opacity: pressed ? 0.6 : 1 }]}
-                >
-                  <Text numberOfLines={1} style={s.title}>
-                    {c.title}
-                  </Text>
-                  <Text style={s.when}>{when(c.updatedAt)}</Text>
-                </Pressable>
-              ))
-            ) : (
-              <Text style={[m.muted, { paddingHorizontal: 4 }]}>Your conversations will show up here.</Text>
-            )}
+          <ScrollView style={{ flex: 1, marginTop: 6 }} showsVerticalScrollIndicator={false}>
+            {conversations.map((c) => (
+              <Pressable
+                key={c.id}
+                accessibilityRole="button"
+                accessibilityState={{ selected: c.id === currentId }}
+                onPress={() => onSelect(c.id)}
+                style={({ pressed }) => [s.item, c.id === currentId && s.current, { opacity: pressed ? 0.6 : 1 }]}
+              >
+                <Text numberOfLines={1} style={s.title}>
+                  {c.title}
+                </Text>
+                <Text style={s.when}>{when(c.updatedAt)}</Text>
+              </Pressable>
+            ))}
           </ScrollView>
         </Animated.View>
       </View>
@@ -113,7 +118,7 @@ export function AgentDrawer({
 }
 
 const s = StyleSheet.create({
-  backdrop: { backgroundColor: "rgba(0,0,0,0.55)" },
+  backdrop: { backgroundColor: "rgba(0,0,0,0.5)" },
   panel: {
     position: "absolute",
     top: 0,
@@ -122,36 +127,24 @@ const s = StyleSheet.create({
     backgroundColor: colors.canvas,
     borderRightWidth: 1,
     borderRightColor: colors.line,
-    paddingHorizontal: space.edge,
+    paddingHorizontal: 14,
   },
-  balance: {
-    gap: 8,
-    padding: 16,
-    borderRadius: 18,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.cardLine,
-  },
+  balanceRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 2 },
   amount: {
+    flex: 1,
     fontFamily: fonts.numericBold,
-    fontSize: 28,
-    lineHeight: 34,
-    letterSpacing: -0.5,
+    fontSize: 22,
+    lineHeight: 28,
     color: colors.ice,
     fontVariant: ["tabular-nums"],
-    marginBottom: 4,
   },
-  row: {
-    minHeight: 48,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-  },
-  newRow: { marginTop: 14, backgroundColor: colors.surface },
-  newText: { fontFamily: fonts.medium, fontSize: 15, color: colors.ice },
-  current: { backgroundColor: colors.surfaceRaised },
-  title: { flex: 1, fontFamily: chatFonts.regular, fontSize: 15, color: colors.ice },
-  when: { fontFamily: fonts.regular, fontSize: 12, color: colors.muted },
+  fund: { paddingHorizontal: 10, height: 28, borderRadius: 14, backgroundColor: colors.surfaceRaised, justifyContent: "center" },
+  fundText: { fontFamily: fonts.medium, fontSize: 13, color: colors.ice },
+  divider: { height: 1, backgroundColor: colors.line, marginVertical: 14 },
+  row: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: 40 },
+  newText: { flexShrink: 1, fontFamily: fonts.medium, fontSize: 14, color: colors.ice },
+  item: { minHeight: 44, justifyContent: "center", paddingHorizontal: 8, borderRadius: 10 },
+  current: { backgroundColor: colors.surface },
+  title: { fontFamily: chatFonts.regular, fontSize: 14, color: colors.ice },
+  when: { fontFamily: fonts.regular, fontSize: 11, color: colors.muted, marginTop: 1 },
 });

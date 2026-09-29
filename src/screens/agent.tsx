@@ -354,7 +354,8 @@ export function AgentScreen({
         <Text numberOfLines={1} style={s.headerTitle}>
           {identity === "unlocking" ? "Unlocking…" : title ?? ""}
         </Text>
-        <IconButton name="compose" label="New conversation" quiet onPress={startNew} />
+        {/* Balances the menu button so the title stays centred. */}
+        <View style={{ width: 44 }} />
       </View>
 
       <ScrollView

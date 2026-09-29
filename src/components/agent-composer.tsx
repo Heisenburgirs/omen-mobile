@@ -5,9 +5,10 @@ import { tradingColors as colors, chatFonts, space } from "../theme";
 import type { PendingAttachment } from "../agent/attachments";
 
 /**
- * The message box: attach on the left, and inside the field a button that
- * is the microphone while there is nothing to send and the send arrow once
- * there is. While listening it stops the recording.
+ * The message box: one rounded field with the text on top and, on the line
+ * below, attach on the left and the microphone on the right. Once there is
+ * something to send, the microphone becomes the send button; while
+ * listening it stops the recording.
  */
 export function AgentComposer({
   draft,
@@ -30,70 +31,68 @@ export function AgentComposer({
   listening: boolean;
   onToggleVoice: () => void;
 }) {
-  const canSend = (draft.trim().length > 0 || attachments.length > 0) && !busy;
-  const action = listening ? "stop" : canSend ? "send" : "mic";
+  const hasContent = draft.trim().length > 0 || attachments.length > 0;
+  const action = listening ? "stop" : hasContent ? "send" : "mic";
   return (
     <View style={s.wrap}>
-      {attachments.length ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips}>
-          {attachments.map((a, i) => (
-            <View key={`${a.name}-${i}`} style={s.chip}>
-              {a.kind === "image" && a.uri ? (
-                <Image source={{ uri: a.uri }} style={s.thumb} />
-              ) : (
-                <Icon name="file" size={16} color={colors.muted} />
-              )}
-              <Text numberOfLines={1} style={s.chipText}>
-                {a.name}
-              </Text>
-              <Pressable accessibilityLabel={`Remove ${a.name}`} hitSlop={8} onPress={() => onRemoveAttachment(i)}>
-                <Icon name="close" size={14} color={colors.muted} />
-              </Pressable>
-            </View>
-          ))}
-        </ScrollView>
-      ) : null}
-      <View style={s.row}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Attach a photo or file"
-          onPress={onAttach}
-          style={({ pressed }) => [s.plus, { opacity: pressed ? 0.6 : 1 }]}
-        >
-          <Icon name="plus" size={20} color={colors.ice} />
-        </Pressable>
-        <View style={s.field}>
-          <TextInput
-            accessibilityLabel="Message the agent"
-            autoComplete="off"
-            importantForAutofill="no"
-            placeholder={listening ? "Listening…" : "Message your agent"}
-            placeholderTextColor={colors.muted}
-            selectionColor={colors.focus}
-            cursorColor={colors.focus}
-            value={draft}
-            onChangeText={onChangeDraft}
-            multiline
-            maxLength={2000}
-            style={s.input}
-          />
+      <View style={s.field}>
+        {attachments.length ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.chips}>
+            {attachments.map((a, i) => (
+              <View key={`${a.name}-${i}`} style={s.chip}>
+                {a.kind === "image" && a.uri ? (
+                  <Image source={{ uri: a.uri }} style={s.thumb} />
+                ) : (
+                  <Icon name="file" size={16} color={colors.muted} />
+                )}
+                <Text numberOfLines={1} style={s.chipText}>
+                  {a.name}
+                </Text>
+                <Pressable accessibilityLabel={`Remove ${a.name}`} hitSlop={8} onPress={() => onRemoveAttachment(i)}>
+                  <Icon name="close" size={14} color={colors.muted} />
+                </Pressable>
+              </View>
+            ))}
+          </ScrollView>
+        ) : null}
+        <TextInput
+          accessibilityLabel="Message the agent"
+          autoComplete="off"
+          importantForAutofill="no"
+          placeholder={listening ? "Listening…" : "Message your agent"}
+          placeholderTextColor={colors.muted}
+          selectionColor={colors.focus}
+          cursorColor={colors.focus}
+          value={draft}
+          onChangeText={onChangeDraft}
+          multiline
+          maxLength={2000}
+          style={s.input}
+        />
+        <View style={s.tools}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Attach a photo or file"
+            onPress={onAttach}
+            hitSlop={6}
+            style={({ pressed }) => [s.tool, { opacity: pressed ? 0.6 : 1 }]}
+          >
+            <Icon name="plus" size={20} color={colors.ice} />
+          </Pressable>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={action === "send" ? "Send message" : action === "stop" ? "Stop listening" : "Speak to the agent"}
-            disabled={action === "send" ? !canSend : busy && !listening}
+            disabled={action === "send" ? busy : false}
             onPress={action === "send" ? onSend : onToggleVoice}
+            hitSlop={6}
             style={({ pressed }) => [
-              s.inner,
+              s.tool,
               action === "send" && s.send,
               action === "stop" && s.stop,
-              { opacity: pressed ? 0.7 : 1 },
+              { opacity: action === "send" && busy ? 0.4 : pressed ? 0.7 : 1 },
             ]}
           >
-            <Icon
-              name={action}
-              size={18}
-              color={action === "send" ? colors.canvas : action === "stop" ? colors.ice : colors.ice}
-            />
+            <Icon name={action} size={18} color={action === "send" ? colors.canvas : colors.ice} />
           </Pressable>
         </View>
       </View>
@@ -102,8 +101,16 @@ export function AgentComposer({
 }
 
 const s = StyleSheet.create({
-  wrap: { paddingHorizontal: space.edge, paddingTop: 8, paddingBottom: 4, gap: 8 },
-  chips: { gap: 8 },
+  wrap: { paddingHorizontal: space.edge, paddingTop: 8, paddingBottom: 4 },
+  field: {
+    borderRadius: 22,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.line,
+    paddingTop: 6,
+    paddingBottom: 6,
+  },
+  chips: { gap: 8, paddingHorizontal: 10, paddingTop: 4 },
   chip: {
     flexDirection: "row",
     alignItems: "center",
@@ -111,49 +118,31 @@ const s = StyleSheet.create({
     maxWidth: 220,
     paddingLeft: 6,
     paddingRight: 10,
-    height: 36,
+    height: 34,
     borderRadius: 12,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.line,
+    backgroundColor: colors.surfaceRaised,
   },
   thumb: { width: 24, height: 24, borderRadius: 6 },
   chipText: { flexShrink: 1, fontFamily: chatFonts.regular, fontSize: 13, color: colors.ice },
-  row: { flexDirection: "row", alignItems: "flex-end", gap: 8 },
-  plus: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.line,
-  },
-  field: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "flex-end",
-    minHeight: 44,
-    paddingLeft: 16,
-    paddingRight: 4,
-    paddingVertical: 3,
-    borderRadius: 22,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.line,
-  },
   input: {
-    flex: 1,
+    minHeight: 40,
     maxHeight: 132,
-    paddingTop: 9,
-    paddingBottom: 9,
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 4,
     color: colors.ice,
     fontFamily: chatFonts.regular,
     fontSize: 16,
     lineHeight: 22,
+    textAlignVertical: "top",
   },
-  inner: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center", marginLeft: 6 },
+  tools: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 8,
+  },
+  tool: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
   send: { backgroundColor: colors.ice },
   stop: { backgroundColor: colors.cobalt },
 });
