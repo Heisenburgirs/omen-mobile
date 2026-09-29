@@ -16,7 +16,7 @@ function when(ms: number): string {
 }
 
 /**
- * The agent's side menu, half the screen wide: the balance with Fund beside
+ * The agent's side menu, seven tenths of the screen wide: the balance with Fund beside
  * it, a new conversation, and the past ones, newest first.
  */
 export function AgentDrawer({
@@ -41,7 +41,7 @@ export function AgentDrawer({
   onNew: () => void;
 }) {
   const insets = useSafeAreaInsets();
-  const width = Math.round(Dimensions.get("window").width * 0.5);
+  const width = Math.round(Dimensions.get("window").width * 0.7);
   const x = useRef(new Animated.Value(-width)).current;
   const [mounted, setMounted] = useState(visible);
   useEffect(() => {
@@ -82,8 +82,6 @@ export function AgentDrawer({
             </Pressable>
           </View>
 
-          <View style={s.divider} />
-
           <Pressable
             accessibilityRole="button"
             onPress={onNew}
@@ -91,7 +89,7 @@ export function AgentDrawer({
           >
             <Icon name="compose" size={16} color={colors.ice} />
             <Text numberOfLines={1} style={s.newText}>
-              New chat
+              New conversation
             </Text>
           </Pressable>
 
@@ -138,10 +136,9 @@ const s = StyleSheet.create({
     color: colors.ice,
     fontVariant: ["tabular-nums"],
   },
-  fund: { paddingHorizontal: 10, height: 28, borderRadius: 14, backgroundColor: colors.surfaceRaised, justifyContent: "center" },
+  fund: { height: 28, justifyContent: "center" },
   fundText: { fontFamily: fonts.medium, fontSize: 13, color: colors.ice },
-  divider: { height: 1, backgroundColor: colors.line, marginVertical: 14 },
-  row: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: 40 },
+  row: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: 40, marginTop: 18 },
   newText: { flexShrink: 1, fontFamily: fonts.medium, fontSize: 14, color: colors.ice },
   item: { minHeight: 44, justifyContent: "center", paddingHorizontal: 8, borderRadius: 10 },
   current: { backgroundColor: colors.surface },
