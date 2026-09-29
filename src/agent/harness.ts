@@ -26,7 +26,8 @@ export { guessIntent, type Intent } from "./intent";
 // The agent proposes trades and never executes them: a trade is the user's
 // tap in the app, signed by their wallet.
 
-export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
+export type ContentPart = { type: "text"; text: string } | { type: "image_url"; image_url: { url: string } };
+export type ChatMessage = { role: "system" | "user" | "assistant"; content: string | ContentPart[] };
 export type Timing = { label: string; ms: number };
 export type WriteOptions = { model: string; maxTokens: number };
 export type Writer = (
@@ -174,7 +175,12 @@ export async function runTurn(input: TurnInput): Promise<TurnResult> {
   // 3. Write, with the model the kind of answer calls for.
   const choice = MODELS[plan.tier];
   const system = await systemPrompt(input.owner, plan.tier);
-  const content = data.length ? `${input.text}\n\n[data]\n${data.join("\n")}\n[/data]` : input.text;
+  const text = data.length ? `${input.text}\n\n[data]\n${data.join("\n")}\n[/data]` : input.text;
+  // Photos go with the message itself, for the model to look at.
+  const images = (input.attachments ?? []).flatMap((a) => (a.kind === "image" && a.dataUrl ? [a.dataUrl] : []));
+  const content: ChatMessage["content"] = images.length
+    ? [{ type: "text", text }, ...images.map((url) => ({ type: "image_url" as const, image_url: { url } }))]
+    : text;
   const written = await time("write", () =>
     input.write([{ role: "system", content: system }, ...historyMessages(input.history), { role: "user", content }], {
       model: choice.model,

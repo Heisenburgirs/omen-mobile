@@ -18,7 +18,7 @@ type StoredRow = {
   createdAt: number;
   meta?: string;
 };
-type StoredConversation = { id: string; owner: string; title: string; createdAt: number; updatedAt: number };
+type StoredConversation = { id: string; owner: string; title: string; createdAt: number; updatedAt: number; pinned?: boolean };
 type Document = { kv: Record<string, string>; messages: StoredRow[]; conversations?: StoredConversation[]; nextId: number };
 const KEY = "omen-agent.v1";
 const MAX_MESSAGES = 600;
@@ -108,7 +108,7 @@ export async function listConversations(owner: string, limit = 60): Promise<Conv
   await adoptLegacy(owner);
   const rows = read()
     .conversations!.filter((c) => c.owner === owner)
-    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .sort((a, b) => Number(b.pinned ?? false) - Number(a.pinned ?? false) || b.updatedAt - a.updatedAt)
     .slice(0, limit);
   const out: Conversation[] = [];
   for (const r of rows) {
@@ -123,7 +123,7 @@ export async function listConversations(owner: string, limit = 60): Promise<Conv
           write(doc);
         }
       }
-      out.push({ id: r.id, title, createdAt: r.createdAt, updatedAt: r.updatedAt });
+      out.push({ id: r.id, title, createdAt: r.createdAt, updatedAt: r.updatedAt, pinned: r.pinned === true });
     } catch {
       // Sealed under another key.
     }
@@ -134,6 +134,12 @@ export async function touchConversation(id: string): Promise<void> {
   const doc = read();
   const c = doc.conversations!.find((x) => x.id === id);
   if (c) c.updatedAt = Date.now();
+  write(doc);
+}
+export async function pinConversation(owner: string, id: string, pinned: boolean): Promise<void> {
+  const doc = read();
+  const c = doc.conversations!.find((x) => x.owner === owner && x.id === id);
+  if (c) c.pinned = pinned;
   write(doc);
 }
 export async function deleteConversation(owner: string, id: string): Promise<void> {

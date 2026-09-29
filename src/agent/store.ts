@@ -25,7 +25,7 @@ export type StoredMessage = {
   createdAt: number;
   attachments?: Attachment[];
 };
-export type Conversation = { id: string; title: string; createdAt: number; updatedAt: number };
+export type Conversation = { id: string; title: string; createdAt: number; updatedAt: number; pinned?: boolean };
 
 /** Messages written before conversations existed land in this one. */
 const LEGACY = "legacy";
@@ -61,6 +61,7 @@ function db(): Promise<SQLite.SQLiteDatabase> {
     for (const column of ["conversation TEXT", "meta TEXT"]) {
       await database.execAsync(`ALTER TABLE messages ADD COLUMN ${column}`).catch(() => undefined);
     }
+    await database.execAsync("ALTER TABLE conversations ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0").catch(() => undefined);
     await database.execAsync("CREATE INDEX IF NOT EXISTS messages_conversation ON messages(owner, conversation, id)");
     return database;
   })();
@@ -130,11 +131,11 @@ export async function createConversation(owner: string, title: string, id = newC
   return { id, title: clean, createdAt: now, updatedAt: now };
 }
 
-/** The user's conversations, most recent first. */
+/** The user's conversations: pinned ones first, then the most recent. */
 export async function listConversations(owner: string, limit = 60): Promise<Conversation[]> {
   await adoptLegacy(owner);
-  const rows = await (await db()).getAllAsync<{ id: string; title: string; created_at: number; updated_at: number }>(
-    "SELECT id, title, created_at, updated_at FROM conversations WHERE owner = ? ORDER BY updated_at DESC LIMIT ?",
+  const rows = await (await db()).getAllAsync<{ id: string; title: string; created_at: number; updated_at: number; pinned: number }>(
+    "SELECT id, title, created_at, updated_at, pinned FROM conversations WHERE owner = ? ORDER BY pinned DESC, updated_at DESC LIMIT ?",
     [owner, limit],
   );
   const out: Conversation[] = [];
@@ -147,7 +148,7 @@ export async function listConversations(owner: string, limit = 60): Promise<Conv
           await (await db()).runAsync("UPDATE conversations SET title = ? WHERE id = ?", [await seal(title), r.id]);
         }
       }
-      out.push({ id: r.id, title, createdAt: r.created_at, updatedAt: r.updated_at });
+      out.push({ id: r.id, title, createdAt: r.created_at, updatedAt: r.updated_at, pinned: r.pinned === 1 });
     } catch {
       // Sealed under another key; not this user's to read.
     }
@@ -156,6 +157,9 @@ export async function listConversations(owner: string, limit = 60): Promise<Conv
 }
 export async function touchConversation(id: string): Promise<void> {
   await (await db()).runAsync("UPDATE conversations SET updated_at = ? WHERE id = ?", [Date.now(), id]);
+}
+export async function pinConversation(owner: string, id: string, pinned: boolean): Promise<void> {
+  await (await db()).runAsync("UPDATE conversations SET pinned = ? WHERE owner = ? AND id = ?", [pinned ? 1 : 0, owner, id]);
 }
 export async function deleteConversation(owner: string, id: string): Promise<void> {
   const database = await db();

@@ -182,7 +182,9 @@ export type IconName =
   | "stop"
   | "image"
   | "file"
-  | "compose";
+  | "compose"
+  | "more"
+  | "pin";
 export function Icon({
   name,
   size = 22,
@@ -203,6 +205,8 @@ export function Icon({
     image: "M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4M15.5 9.5h.01",
     file: "M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6",
     compose: "M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4",
+    more: "",
+    pin: "M9 4h6M10 4v5l-3 4h10l-3-4V4M12 13v7",
     agent:
       "M12 3v3M8 3h8M7 7h10a3 3 0 013 3v8a3 3 0 01-3 3H7a3 3 0 01-3-3v-8a3 3 0 013-3zM8 12v2m8-2v2m-7 3h6M1 12v4m22-4v4",
     search: "M21 21l-5-5",
@@ -256,7 +260,13 @@ export function Icon({
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      {name === "info" || name === "activity" ? (
+      {name === "more" ? (
+        <>
+          <Circle cx="5.5" cy="12" r="1.6" fill={color} />
+          <Circle cx="12" cy="12" r="1.6" fill={color} />
+          <Circle cx="18.5" cy="12" r="1.6" fill={color} />
+        </>
+      ) : name === "info" || name === "activity" ? (
         <Circle cx="12" cy="12" r="9" stroke={color} strokeWidth={1.7} />
       ) : name === "search" ? (
         <Circle cx="10.5" cy="10.5" r="6.5" stroke={color} strokeWidth={1.7} />

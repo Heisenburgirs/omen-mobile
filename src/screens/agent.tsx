@@ -17,8 +17,10 @@ import type { Fetcher } from "../agent/tools";
 import {
   addMessage,
   createConversation,
+  deleteConversation,
   listConversations,
   listMessages,
+  pinConversation,
   touchConversation,
   type Attachment,
   type Conversation,
@@ -499,6 +501,19 @@ export function AgentScreen({
         currentId={conversationId}
         onSelect={(id) => void openConversation(id)}
         onNew={startNew}
+        onPin={(id, pinned) => {
+          if (!owner) return;
+          void pinConversation(owner, id, pinned).then(reloadConversations);
+        }}
+        onDelete={(id) => {
+          if (!owner) return;
+          if (id === conversationId) {
+            setConversationId(null);
+            history.current = [];
+            setMessages([]);
+          }
+          void deleteConversation(owner, id).then(reloadConversations);
+        }}
         panel={
           fundView ? (
             <AgentFundPanel
