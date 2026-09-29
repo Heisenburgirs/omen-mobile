@@ -91,7 +91,7 @@ export function AgentDrawer({
           >
             <Icon name="compose" size={16} color={colors.ice} />
             <Text numberOfLines={1} style={s.newText}>
-              New conversation
+              New chat
             </Text>
           </Pressable>
 
