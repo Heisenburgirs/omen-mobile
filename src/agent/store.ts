@@ -1,5 +1,6 @@
 import * as SQLite from "expo-sqlite";
 import { open, seal } from "./identity";
+import { titleFrom } from "./titles";
 
 // The agent's memory on the device: a small SQLite file with a key-value
 // table (memory blocks, presets, the channel session), the conversations and
@@ -28,6 +29,8 @@ export type Conversation = { id: string; title: string; createdAt: number; updat
 
 /** Messages written before conversations existed land in this one. */
 const LEGACY = "legacy";
+/** What the legacy conversation was called before titles came from its first message. */
+const PLACEHOLDER = "Earlier chat";
 
 let opening: Promise<SQLite.SQLiteDatabase> | undefined;
 function db(): Promise<SQLite.SQLiteDatabase> {
@@ -84,6 +87,24 @@ export function newConversationId(): string {
   return `c_${Date.now().toString(36)}_${Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")}`;
 }
 
+/** The name a conversation takes from the first thing the user said in it. */
+async function titleOf(owner: string, conversation: string | null): Promise<string> {
+  const row = await (await db()).getFirstAsync<{ text: string; meta: string | null }>(
+    conversation === null
+      ? "SELECT text, meta FROM messages WHERE owner = ? AND conversation IS NULL AND role = 'user' ORDER BY id LIMIT 1"
+      : "SELECT text, meta FROM messages WHERE owner = ? AND conversation = ? AND role = 'user' ORDER BY id LIMIT 1",
+    conversation === null ? [owner] : [owner, conversation],
+  );
+  if (!row) return PLACEHOLDER;
+  try {
+    const text = await open(row.text);
+    const attachment = row.meta ? (JSON.parse(await open(row.meta)) as { attachments?: Attachment[] }).attachments?.[0]?.name : undefined;
+    return titleFrom(text, attachment ?? PLACEHOLDER);
+  } catch {
+    return PLACEHOLDER;
+  }
+}
+
 /** Gives messages from before conversations a home, once. */
 async function adoptLegacy(owner: string): Promise<void> {
   const database = await db();
@@ -94,14 +115,14 @@ async function adoptLegacy(owner: string): Promise<void> {
   if (!orphan?.n) return;
   await database.runAsync(
     "INSERT OR IGNORE INTO conversations (id, owner, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-    [LEGACY, owner, await seal("Earlier chat"), orphan.first, orphan.last],
+    [LEGACY, owner, await seal(await titleOf(owner, null)), orphan.first, orphan.last],
   );
   await database.runAsync("UPDATE messages SET conversation = ? WHERE owner = ? AND conversation IS NULL", [LEGACY, owner]);
 }
 
 export async function createConversation(owner: string, title: string, id = newConversationId()): Promise<Conversation> {
   const now = Date.now();
-  const clean = title.replace(/\s+/g, " ").trim().slice(0, 80) || "New conversation";
+  const clean = titleFrom(title);
   await (await db()).runAsync(
     "INSERT INTO conversations (id, owner, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
     [id, owner, await seal(clean), now, now],
@@ -119,7 +140,14 @@ export async function listConversations(owner: string, limit = 60): Promise<Conv
   const out: Conversation[] = [];
   for (const r of rows) {
     try {
-      out.push({ id: r.id, title: await open(r.title), createdAt: r.created_at, updatedAt: r.updated_at });
+      let title = await open(r.title);
+      if (title === PLACEHOLDER) {
+        title = await titleOf(owner, r.id);
+        if (title !== PLACEHOLDER) {
+          await (await db()).runAsync("UPDATE conversations SET title = ? WHERE id = ?", [await seal(title), r.id]);
+        }
+      }
+      out.push({ id: r.id, title, createdAt: r.created_at, updatedAt: r.updated_at });
     } catch {
       // Sealed under another key; not this user's to read.
     }

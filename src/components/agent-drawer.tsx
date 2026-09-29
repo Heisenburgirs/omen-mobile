@@ -17,7 +17,8 @@ function when(ms: number): string {
 
 /**
  * The agent's side menu, seven tenths of the screen wide: the balance with Fund beside
- * it, a new conversation, and the past ones, newest first.
+ * it, a new conversation, and the past ones, newest first. Fund swaps the
+ * menu for `panel` in place rather than opening anything over it.
  */
 export function AgentDrawer({
   visible,
@@ -29,6 +30,7 @@ export function AgentDrawer({
   currentId,
   onSelect,
   onNew,
+  panel,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -39,6 +41,8 @@ export function AgentDrawer({
   currentId: string | null;
   onSelect: (id: string) => void;
   onNew: () => void;
+  /** Shown in place of the menu while set (the fund view). */
+  panel?: React.ReactNode;
 }) {
   const insets = useSafeAreaInsets();
   const width = Math.round(Dimensions.get("window").width * 0.7);
@@ -67,6 +71,8 @@ export function AgentDrawer({
             { width, paddingTop: insets.top + 18, paddingBottom: insets.bottom + 12, transform: [{ translateX: x }] },
           ]}
         >
+          {panel ? panel : (
+          <>
           <Text style={m.label}>Agent balance</Text>
           <View style={s.balanceRow}>
             <Text numberOfLines={1} adjustsFontSizeToFit style={s.amount}>
@@ -109,6 +115,8 @@ export function AgentDrawer({
               </Pressable>
             ))}
           </ScrollView>
+          </>
+          )}
         </Animated.View>
       </View>
     </Modal>

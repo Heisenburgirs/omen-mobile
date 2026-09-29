@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { Linking, Platform } from "react-native";
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from "expo-speech-recognition";
 import { showToast } from "../lib/toast";
 import { useLatest } from "./use-latest";
@@ -29,13 +30,24 @@ export function useVoiceInput(onTranscript: (text: string, final: boolean) => vo
       return;
     }
     try {
-      if (!ExpoSpeechRecognitionModule.isRecognitionAvailable()) {
-        showToast("Speech recognition isn't available on this device.");
+      // The first tap asks for the microphone. Once the user has said no for
+      // good, Android stops showing the prompt, so the tap opens OMEN's
+      // settings where it can be turned on.
+      let permission = await ExpoSpeechRecognitionModule.getPermissionsAsync();
+      if (!permission.granted && permission.canAskAgain !== false) {
+        permission = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
+      }
+      if (!permission.granted) {
+        if (Platform.OS !== "web" && permission.canAskAgain === false) {
+          showToast("Turn on the microphone for OMEN in Settings.");
+          void Linking.openSettings().catch(() => undefined);
+        } else {
+          showToast("Allow the microphone to talk to your agent.");
+        }
         return;
       }
-      const permission = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-      if (!permission.granted) {
-        showToast("Allow the microphone to talk to your agent.");
+      if (!ExpoSpeechRecognitionModule.isRecognitionAvailable()) {
+        showToast("Speech recognition isn't available on this device.");
         return;
       }
       ExpoSpeechRecognitionModule.start({ lang: "en-US", interimResults: true, continuous: false });

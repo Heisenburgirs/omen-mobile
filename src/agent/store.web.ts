@@ -1,4 +1,5 @@
 import { open, seal } from "./identity";
+import { titleFrom } from "./titles";
 import type { Attachment, Conversation, StoredMessage } from "./store";
 export type { Attachment, Conversation, StoredMessage } from "./store";
 
@@ -22,6 +23,7 @@ type Document = { kv: Record<string, string>; messages: StoredRow[]; conversatio
 const KEY = "omen-agent.v1";
 const MAX_MESSAGES = 600;
 const LEGACY = "legacy";
+const PLACEHOLDER = "Earlier chat";
 
 function read(): Document {
   try {
@@ -65,6 +67,17 @@ export function newConversationId(): string {
   return `c_${Date.now().toString(36)}_${Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")}`;
 }
 
+async function titleOf(rows: StoredRow[]): Promise<string> {
+  const first = rows.find((m) => m.role === "user");
+  if (!first) return PLACEHOLDER;
+  try {
+    const attachment = first.meta ? (JSON.parse(await open(first.meta)) as { attachments?: Attachment[] }).attachments?.[0]?.name : undefined;
+    return titleFrom(await open(first.text), attachment ?? PLACEHOLDER);
+  } catch {
+    return PLACEHOLDER;
+  }
+}
+
 async function adoptLegacy(owner: string): Promise<void> {
   const doc = read();
   const orphans = doc.messages.filter((m) => m.owner === owner && !m.conversation);
@@ -73,7 +86,7 @@ async function adoptLegacy(owner: string): Promise<void> {
     doc.conversations!.push({
       id: LEGACY,
       owner,
-      title: await seal("Earlier chat"),
+      title: await seal(await titleOf(orphans)),
       createdAt: orphans[0].createdAt,
       updatedAt: orphans[orphans.length - 1].createdAt,
     });
@@ -84,7 +97,7 @@ async function adoptLegacy(owner: string): Promise<void> {
 
 export async function createConversation(owner: string, title: string, id = newConversationId()): Promise<Conversation> {
   const now = Date.now();
-  const clean = title.replace(/\s+/g, " ").trim().slice(0, 80) || "New conversation";
+  const clean = titleFrom(title);
   const sealed = await seal(clean);
   const doc = read();
   doc.conversations!.push({ id, owner, title: sealed, createdAt: now, updatedAt: now });
@@ -100,7 +113,17 @@ export async function listConversations(owner: string, limit = 60): Promise<Conv
   const out: Conversation[] = [];
   for (const r of rows) {
     try {
-      out.push({ id: r.id, title: await open(r.title), createdAt: r.createdAt, updatedAt: r.updatedAt });
+      let title = await open(r.title);
+      if (title === PLACEHOLDER) {
+        const doc = read();
+        title = await titleOf(doc.messages.filter((m) => m.owner === owner && m.conversation === r.id));
+        const row = doc.conversations!.find((c) => c.id === r.id);
+        if (title !== PLACEHOLDER && row) {
+          row.title = await seal(title);
+          write(doc);
+        }
+      }
+      out.push({ id: r.id, title, createdAt: r.createdAt, updatedAt: r.updatedAt });
     } catch {
       // Sealed under another key.
     }

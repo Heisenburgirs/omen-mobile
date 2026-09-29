@@ -4,7 +4,7 @@ import { Icon, IconButton, m } from "../components/market-ui";
 import { OmenSheet } from "../components/omen-sheet";
 import { AgentDrawer } from "../components/agent-drawer";
 import { AgentComposer } from "../components/agent-composer";
-import { AgentFundSheet } from "../components/agent-fund-sheet";
+import { AgentFundPanel } from "../components/agent-fund-panel";
 import { usd } from "../domain/market";
 import { USDC } from "../domain/models";
 import { tradingColors as colors, tradingFonts as fonts, chatFonts, space } from "../theme";
@@ -34,6 +34,8 @@ import { useRyvoChannel } from "../agent/ryvo/use-channel";
 
 const GREETING = "What are we trading today, anon?";
 const SUGGESTIONS = ["What paid me this week?", "How is my portfolio doing?", "Should I buy more ZEC?"];
+/** The least a single deposit into the agent can be, in dollars. */
+const MIN_DEPOSIT = 5;
 const UNFUNDED = "Fund me with USDC to get started: open the menu and tap Fund.";
 
 type Shown = { id: number; from: "agent" | "user"; text: string; attachments?: Attachment[] };
@@ -163,13 +165,18 @@ export function AgentScreen({
   }, [reloadConversations]);
 
   const [drawer, setDrawer] = useState(false);
-  const [fundSheet, setFundSheet] = useState(false);
+  // The side menu shows either the conversations or, after Fund, the fund view.
+  const [fundView, setFundView] = useState(false);
   const [attachSheet, setAttachSheet] = useState(false);
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState<PendingAttachment[]>([]);
   const [typing, setTyping] = useState(false);
   const [busy, setBusy] = useState<"fund" | "withdraw" | null>(null);
 
+  const closeDrawer = () => {
+    setDrawer(false);
+    setFundView(false);
+  };
   const openConversation = async (id: string) => {
     setDrawer(false);
     if (!owner) return;
@@ -307,10 +314,10 @@ export function AgentScreen({
         await waitConfirmed(signature, token);
       }
       const next = await channel.fund(value);
-      setFundSheet(false);
+      setFundView(false);
       showToast(`Agent funded: ${usd(next.availableUsdc)} available`);
     } catch (e) {
-      setFundSheet(false);
+      closeDrawer();
       agentSays(`Funding stopped: ${e instanceof Error ? e.message : "something went wrong."}`);
     } finally {
       await refreshIdle();
@@ -327,16 +334,16 @@ export function AgentScreen({
       if (funded) {
         const next = await channel.withdraw();
         if (next.closeDeadline) {
-          setFundSheet(false);
+          setFundView(false);
           showToast("Withdrawal started. Funds return within 48 hours.");
           return;
         }
       }
       const moved = await sweep(refund);
-      setFundSheet(false);
+      setFundView(false);
       showToast(moved > 0 ? `${usd(moved)} returned to your wallet` : "Nothing to withdraw");
     } catch (e) {
-      setFundSheet(false);
+      closeDrawer();
       agentSays(`Withdrawal stopped: ${e instanceof Error ? e.message : "something went wrong."}`);
     } finally {
       await refreshIdle();
@@ -430,30 +437,32 @@ export function AgentScreen({
 
       <AgentDrawer
         visible={drawer}
-        onClose={() => setDrawer(false)}
+        onClose={() => !busy && closeDrawer()}
         balanceUsd={balance}
         hidden={hidden}
         onFund={() => {
-          setDrawer(false);
-          setFundSheet(true);
+          setFundView(true);
           void channel.loadLimits();
+          void refreshIdle();
         }}
         conversations={conversations}
         currentId={conversationId}
         onSelect={(id) => void openConversation(id)}
         onNew={startNew}
-      />
-
-      <AgentFundSheet
-        visible={fundSheet}
-        onClose={() => setFundSheet(false)}
-        balanceUsd={balance}
-        cashUsd={cashUsd}
-        maxUsd={Math.max(0, Math.min(cashUsd + idle, channel.limits.maxUsdc - (funded ? channel.view?.depositUsdc ?? 0 : 0)))}
-        minUsd={funded ? 0.01 : channel.limits.minUsdc}
-        busy={busy}
-        onFund={(v) => void fund(v)}
-        onWithdraw={() => void withdraw()}
+        panel={
+          fundView ? (
+            <AgentFundPanel
+              onBack={() => setFundView(false)}
+              balanceUsd={balance}
+              cashUsd={cashUsd}
+              maxUsd={Math.max(0, Math.min(cashUsd + idle, channel.limits.maxUsdc - (funded ? channel.view?.depositUsdc ?? 0 : 0)))}
+              minUsd={Math.max(MIN_DEPOSIT, channel.limits.minUsdc)}
+              busy={busy}
+              onFund={(v) => void fund(v)}
+              onWithdraw={() => void withdraw()}
+            />
+          ) : null
+        }
       />
 
       <OmenSheet visible={attachSheet} onClose={() => setAttachSheet(false)} title="Attach">

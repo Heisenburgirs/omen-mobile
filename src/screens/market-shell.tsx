@@ -986,13 +986,13 @@ function Home({ active }: { active: boolean }) {
 }
 
 type QuickSort = "volume" | "apr" | "cap";
-const quickSorts: QuickSort[] = ["volume", "apr", "cap"];
+const quickSorts: QuickSort[] = ["cap", "apr", "volume"];
 function SearchScreen({ active }: { active: boolean }) {
   const a = useApp();
   const [q, setQ] = useState("");
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<Filters>({});
-  const [sort, setSort] = useState<QuickSort>("volume");
+  const [sort, setSort] = useState<QuickSort>("cap");
   const [direction, setDirection] = useState<SortDirection>("desc");
   const [sheet, setSheet] = useState(false);
   const [cursor, setCursor] = useState("0");
@@ -1213,9 +1213,9 @@ function SearchScreen({ active }: { active: boolean }) {
           >
             {(
               [
-                { label: "Volume", value: "volume" },
-                { label: "APR", value: "apr" },
                 { label: "Market cap", value: "cap" },
+                { label: "APR", value: "apr" },
+                { label: "Volume", value: "volume" },
               ] as const
             )
               .filter((item) => item.value !== "apr" || type === "tokens")
