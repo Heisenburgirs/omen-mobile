@@ -1007,10 +1007,14 @@ function SearchScreen({ active }: { active: boolean }) {
       cancelled = true;
     };
   }, [key]);
+  // Typing settles for 300 ms before a search goes out, and one character
+  // is not a search yet: the list stays as it is until a second one.
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (q.trim() !== search) setRows([]);
-      setSearch(q.trim());
+      const typed = q.trim();
+      const next = typed.length >= 2 ? typed : "";
+      if (next !== search) setRows([]);
+      setSearch(next);
       setCursor("0");
     }, 300);
     return () => clearTimeout(timer);
@@ -1034,6 +1038,11 @@ function SearchScreen({ active }: { active: boolean }) {
   };
   // APR is a Stonk figure: the other lists rank by volume in its place.
   const listSort = type !== "tokens" && sort === "apr" ? "volume" : sort;
+  // Words typed into Tokens also search the whole chain, which takes a
+  // couple of seconds the first time; that part is asked for separately
+  // (chain=only) so the index's matches show at once (chain=skip) and the
+  // chain's finds join them on top when they arrive.
+  const chainSearch = type === "tokens" && cursor === "0" && search.length >= 2 && !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(search);
   const listParams = {
     scope: "stonk",
     type,
@@ -1042,8 +1051,10 @@ function SearchScreen({ active }: { active: boolean }) {
     direction,
     filters: JSON.stringify(filters),
     cursor,
+    ...(chainSearch ? { chain: "skip" } : {}),
   };
   const assets = useMobile<Asset[]>("assets", listParams, active && restored, 10000);
+  const chainFinds = useMobile<Asset[]>("assets", { ...listParams, chain: "only" }, active && restored && chainSearch, 0);
   // The tab is mounted from launch: its first page is fetched in the
   // background then, so opening Search shows the list at once.
   const prefetch = usePrefetchMobile();
@@ -1067,7 +1078,11 @@ function SearchScreen({ active }: { active: boolean }) {
   }, [assets.data, cursor]);
   // The first page renders straight from the query so a fresh result never
   // passes through an empty frame before the accumulated rows catch up.
-  const visible = rows.length ? rows : (assets.data?.data ?? []);
+  const listed = rows.length ? rows : (assets.data?.data ?? []);
+  const finds = chainSearch ? (chainFinds.data?.data ?? []) : [];
+  const visible = finds.length
+    ? [...finds, ...listed.filter((asset) => !finds.some((f) => f.mint === asset.mint))]
+    : listed;
   // The first screenful draws at once and the rest of the page right after,
   // so a fresh list appears without waiting on thirty rows and their logos.
   const FIRST_ROWS = 15;
@@ -1305,7 +1320,7 @@ function SearchScreen({ active }: { active: boolean }) {
               />
             ))}
           </View>
-        ) : !restored || assets.isPending || (assets.isFetching && !assets.data) ? (
+        ) : !restored || assets.isPending || (assets.isFetching && !assets.data) || (chainSearch && chainFinds.isPending) ? (
           // A screenful of placeholders, so the list never appears to grow
           // out of a short stub.
           <SkeletonRows plain count={12} />
