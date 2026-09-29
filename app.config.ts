@@ -76,7 +76,7 @@ const config: ExpoConfig = {
         androidSpeechServicePackages: ["com.google.android.googlequicksearchbox", "com.google.android.as"],
       },
     ],
-    ["expo-image-picker", { photosPermission: "OMEN attaches the photos you pick to your agent conversation.", cameraPermission: false, microphonePermission: false }],
+    ["expo-image-picker", { photosPermission: "OMEN attaches the photos you pick to your agent conversation.", cameraPermission: false }],
     "expo-document-picker",
     "./plugins/with-release-signing.js",
   ],
