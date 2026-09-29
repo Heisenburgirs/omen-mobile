@@ -49,6 +49,7 @@ export function planFromAnswers(answers: Record<string, Answer>, tools: readonly
 }
 
 const INTENT_TOOLS: Record<Intent, string[]> = {
+  agent: ["agent_balance"],
   portfolio: ["balance"],
   dividends: ["dividends", "payouts"],
   token: ["asset"],

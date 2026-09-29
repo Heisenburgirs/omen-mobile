@@ -24,8 +24,20 @@ export type Habits = {
   /** The P&L period the user asks about most, when a message names none. */
   pnlPeriod?: Period;
 };
+/** The agent's own money: the USDC the user funded it with, in its Ryvo channel. */
+export type AgentAccount = {
+  /** "none" before the first funding; "open" while it can pay for replies. */
+  state: string;
+  availableUsdc: number;
+  depositUsdc: number;
+  spentUsdc: number;
+  /** USDC in the agent's wallet outside the channel (a refund or a funding on its way). */
+  idleUsdc: number;
+};
 export type ToolContext = {
   text: string;
+  /** The agent's balance as the app knows it now. */
+  agent?: () => AgentAccount | null;
   fetch: Fetcher;
   /** Past messages matching a query, from the device. */
   search: (query: string) => Promise<{ role: string; text: string }[]>;
@@ -68,10 +80,31 @@ type Asset = { mint?: string; symbol?: string; name?: string };
 export const TOOLS: Tool[] = [
   {
     id: "balance",
-    describe: "the user's current holdings, cash and total value",
+    describe: "the user's own wallet: their current holdings, cash and total value (not the agent's balance)",
     kind: "read",
     source: "omen",
     run: async (ctx) => ({ data: await portfolioSummary(ctx.fetch) }),
+  },
+  {
+    id: "agent_balance",
+    describe: "the agent's own balance: the USDC the user funded the agent with, what it has spent on replies, and what is left",
+    kind: "read",
+    source: "device",
+    run: async (ctx) => {
+      const a = ctx.agent?.();
+      if (!a) return { data: "agent balance unknown right now" };
+      const usd = (n: number) => n.toFixed(2);
+      if (a.state !== "open" && a.idleUsdc < 0.005) return { data: "the agent is not funded: balance 0.00 USDC. The user can fund it from the menu, Fund." };
+      return {
+        data: compact({
+          agentBalanceUsdc: usd((a.state === "open" ? a.availableUsdc : 0) + a.idleUsdc),
+          fundedUsdc: usd(a.depositUsdc),
+          spentOnRepliesUsdc: usd(a.spentUsdc),
+          ...(a.idleUsdc >= 0.005 ? { onItsWayUsdc: usd(a.idleUsdc) } : {}),
+          note: "This is the agent's prepaid balance for its replies, separate from the user's portfolio.",
+        }),
+      };
+    },
   },
   {
     id: "pnl",

@@ -3,8 +3,9 @@ import { mentionedSymbols } from "./tools";
 // What a message is about. Kept free of React Native imports so it can be
 // tested in Node; the harness asks Jev with these labels and falls back to
 // the keyword reading below.
-export type Intent = "portfolio" | "dividends" | "token" | "trade" | "drip" | "market" | "chat";
+export type Intent = "agent" | "portfolio" | "dividends" | "token" | "trade" | "drip" | "market" | "chat";
 export const INTENTS: Record<Intent, string> = {
+  agent: "The agent's own balance: what the user funded it with, spent, or has left",
   portfolio: "Their holdings, balance, performance or what they own",
   dividends: "Dividends or payouts they received or could receive",
   token: "A specific token, stock or coin: its price, dividend, or whether to hold it",
@@ -14,12 +15,24 @@ export const INTENTS: Record<Intent, string> = {
   chat: "Small talk, thanks, or a question about the agent itself",
 };
 
+/** "what is my agent balance", "how much do you have left", "what have you spent". */
+export function isAgentBalance(text: string): boolean {
+  const t = text.toLowerCase();
+  return (
+    /\bagent('s)?\b.{0,30}\b(balance|funds?|money|credits?|spent|left|usdc|budget)\b/.test(t) ||
+    /\b(balance|funds?|money|credits?|budget)\b.{0,20}\b(of|for|on) (the |my )?agent\b/.test(t) ||
+    /\bhow much (do|have) you (have|got|spent|left)\b/.test(t) ||
+    /\b(your|you've|you have) (balance|funds|money|credits|budget|spent|left)\b/.test(t)
+  );
+}
+
 /**
  * A keyword reading of the message: what the agent falls back to when Jev
  * is slow or down, and what lets a short greeting skip Jev entirely.
  */
 export function guessIntent(text: string): Intent {
   const t = text.toLowerCase();
+  if (isAgentBalance(t)) return "agent";
   if (/\b(drip|reinvest)/.test(t)) return "drip";
   if (/\b(dividend|payout|paid me|yield|pays)/.test(t)) return "dividends";
   if (/\b(buy|sell|swap|trade)\b/.test(t)) return "trade";

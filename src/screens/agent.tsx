@@ -264,6 +264,13 @@ export function AgentScreen({
           }
         }) as Fetcher,
         write: channel.write,
+        agent: () => ({
+          state: channel.view?.state ?? "none",
+          availableUsdc: channel.view?.availableUsdc ?? 0,
+          depositUsdc: channel.view?.depositUsdc ?? 0,
+          spentUsdc: channel.view?.spentUsdc ?? 0,
+          idleUsdc: idle,
+        }),
         onRemembered: () => showToast("Noted for next time"),
       });
       let result;

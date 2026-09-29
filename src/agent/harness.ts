@@ -4,10 +4,11 @@ import { MODELS, TIER_GUIDANCE, type Tier } from "./models";
 import { isSmallTalk, keywordPlan, planFromAnswers, planQuestions, type Plan } from "./planner";
 import { learn, recall, signature } from "./presets";
 import { loadPresets, savePresets } from "./presets-store";
-import { TOOLS, toolById, type ToolContext } from "./registry";
+import { TOOLS, toolById, type AgentAccount, type ToolContext } from "./registry";
 import { searchMessages, type StoredMessage } from "./store";
 import type { Fetcher } from "./tools";
 import { attachmentContext, type PendingAttachment } from "./attachments";
+import { isAgentBalance } from "./intent";
 export { guessIntent, type Intent } from "./intent";
 
 // One turn of the agent. Jev decides, code does, a model writes:
@@ -44,6 +45,8 @@ export type TurnInput = {
   onRemembered?: (line: string) => void;
   /** Photos and files attached to this message. */
   attachments?: PendingAttachment[];
+  /** The agent's own balance, for questions about it. */
+  agent?: () => AgentAccount | null;
 };
 export type TurnResult = {
   reply: string;
@@ -57,6 +60,7 @@ export type TurnResult = {
 
 const IDENTITY = `You are OMEN's agent: a personal trading and dividend assistant living on the user's phone.
 Rules:
+- Two balances exist. The user's portfolio is their own wallet. The agent's balance is the USDC the user funded you with, which pays for your replies. Never give one when asked for the other.
 - Answer from the data block only. Never invent prices, holdings, or yields. If the data lacks it, say so and say what you would need.
 - No headers, no emoji. Money in USD with two decimals; percentages with one.
 - You never execute trades. When a trade makes sense, propose it in one sentence and say the user can do it from the token page; the wallet signs, not you.
@@ -131,6 +135,9 @@ export async function runTurn(input: TurnInput): Promise<TurnResult> {
   const sig = signature(input.text);
   let plan: Plan;
   if (isSmallTalk(input.text)) plan = { tools: [], tier: "chat", source: "chat" };
+  // The agent's own balance is read on the phone; a saved preset or Jev
+  // could mistake it for the user's portfolio, so neither is asked.
+  else if (isAgentBalance(input.text)) plan = { tools: ["agent_balance"], tier: "lookup", source: "keywords" };
   else {
     plan =
       recall(presets, sig) ??
@@ -141,6 +148,7 @@ export async function runTurn(input: TurnInput): Promise<TurnResult> {
   const ctx: ToolContext = {
     text: input.text,
     fetch: input.fetch,
+    ...(input.agent ? { agent: input.agent } : {}),
     search: (q) => searchMessages(input.owner, q, 4),
     habits: presets.habits,
   };
