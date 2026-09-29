@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Image, Keyboard, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Icon, IconButton, m } from "../components/market-ui";
 import { AgentDrawer } from "../components/agent-drawer";
+import { OmenSheet } from "../components/omen-sheet";
 import { AgentComposer } from "../components/agent-composer";
 import { AgentFundPanel } from "../components/agent-fund-panel";
 import { usd } from "../domain/market";
@@ -33,11 +34,10 @@ import { messageSigner, type WalletProvider } from "../agent/ryvo/wallet-signer"
 import { useAgentWallet } from "../agent/agent-wallet";
 import { useRyvoChannel } from "../agent/ryvo/use-channel";
 
-const GREETING = "What are we trading today, anon?";
-const SUGGESTIONS = ["What paid me this week?", "How is my portfolio doing?", "Should I buy more ZEC?"];
+const GREETING = "What should we trade on?";
 /** The least a single deposit into the agent can be, in dollars. */
 const MIN_DEPOSIT = 5;
-const UNFUNDED = "Fund me with USDC to get started: open the menu and tap Fund.";
+const UNFUNDED = "Fund me with USDC to get started: tap $ at the top right.";
 
 type Shown = { id: number; from: "agent" | "user"; text: string; attachments?: Attachment[] };
 const shown = (m: StoredMessage): Shown => ({
@@ -166,8 +166,8 @@ export function AgentScreen({
   }, [reloadConversations]);
 
   const [drawer, setDrawer] = useState(false);
-  // The side menu shows either the conversations or, after Fund, the fund view.
-  const [fundView, setFundView] = useState(false);
+  // Funding opens from the $ at the top right, as a sheet from the bottom.
+  const [fundSheet, setFundSheet] = useState(false);
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState<PendingAttachment[]>([]);
   const [typing, setTyping] = useState(false);
@@ -178,7 +178,6 @@ export function AgentScreen({
 
   const closeDrawer = () => {
     setDrawer(false);
-    setFundView(false);
   };
   const openConversation = async (id: string) => {
     setDrawer(false);
@@ -228,7 +227,7 @@ export function AgentScreen({
     let id = conversationId;
     try {
       if (!id) {
-        const created = await createConversation(owner, clean || attachments[0]?.name || "New conversation");
+        const created = await createConversation(owner, clean || attachments[0]?.name || "New chat");
         id = created.id;
         setConversationId(id);
       }
@@ -351,7 +350,7 @@ export function AgentScreen({
   const fund = async (value: number) => {
     setBusy("fund");
     setPendingFund(value);
-    setFundView(false);
+    setFundSheet(false);
     try {
       // The agent's wallet first (made now if it is the first time), then
       // USDC from the user's wallet into it, then into the channel. USDC
@@ -384,13 +383,13 @@ export function AgentScreen({
       if (funded) {
         const next = await channel.withdraw();
         if (next.closeDeadline) {
-          setFundView(false);
+          setFundSheet(false);
           showToast("Withdrawal started. Funds return within 48 hours.");
           return;
         }
       }
       const moved = await sweep(refund);
-      setFundView(false);
+      setFundSheet(false);
       showToast(moved > 0 ? `${usd(moved)} returned to your wallet` : "Nothing to withdraw");
     } catch (e) {
       closeDrawer();
@@ -411,8 +410,16 @@ export function AgentScreen({
         <Text numberOfLines={1} style={s.headerTitle}>
           {identity === "unlocking" ? "Unlocking…" : title ?? ""}
         </Text>
-        {/* Balances the menu button so the title stays centred. */}
-        <View style={{ width: 44 }} />
+        <IconButton
+          name="dollar"
+          label="Fund agent"
+          quiet
+          onPress={() => {
+            setFundSheet(true);
+            void channel.loadLimits();
+            void refreshIdle();
+          }}
+        />
       </View>
 
       <ScrollView
@@ -424,20 +431,8 @@ export function AgentScreen({
         onContentSizeChange={() => list.current?.scrollToEnd({ animated: true })}
       >
         {messages.length === 0 ? (
-          <View style={{ gap: 10 }}>
-            <View style={[s.bubble, s.theirs]}>
-              <Text style={s.body}>{GREETING}</Text>
-            </View>
-            {SUGGESTIONS.map((text) => (
-              <Pressable
-                key={text}
-                accessibilityRole="button"
-                onPress={() => void send(text)}
-                style={({ pressed }) => [s.suggestion, { opacity: pressed ? 0.6 : 1 }]}
-              >
-                <Text style={s.suggestionText}>{text}</Text>
-              </Pressable>
-            ))}
+          <View style={[s.bubble, s.theirs]}>
+            <Text style={s.body}>{GREETING}</Text>
           </View>
         ) : null}
         {messages.map((message) => (
@@ -489,13 +484,7 @@ export function AgentScreen({
         visible={drawer}
         onClose={closeDrawer}
         balanceUsd={balance + pendingFund}
-        funding={busy === "fund"}
         hidden={hidden}
-        onFund={() => {
-          setFundView(true);
-          void channel.loadLimits();
-          void refreshIdle();
-        }}
         conversations={conversations}
         currentId={conversationId}
         onSelect={(id) => void openConversation(id)}
@@ -513,21 +502,21 @@ export function AgentScreen({
           }
           void deleteConversation(owner, id).then(reloadConversations);
         }}
-        panel={
-          fundView ? (
-            <AgentFundPanel
-              onBack={() => setFundView(false)}
-              balanceUsd={balance}
-              cashUsd={cashUsd}
-              maxUsd={Math.max(0, Math.min(cashUsd + idle, channel.limits.maxUsdc - (funded ? channel.view?.depositUsdc ?? 0 : 0)))}
-              minUsd={Math.max(MIN_DEPOSIT, channel.limits.minUsdc)}
-              busy={busy}
-              onFund={(v) => void fund(v)}
-              onWithdraw={() => void withdraw()}
-            />
-          ) : null
-        }
       />
+
+      <OmenSheet visible={fundSheet} onClose={() => setFundSheet(false)} title="Fund agent">
+        <View style={{ paddingHorizontal: 24, paddingBottom: 12 }}>
+          <AgentFundPanel
+            balanceUsd={balance + pendingFund}
+            cashUsd={cashUsd}
+            maxUsd={Math.max(0, Math.min(cashUsd + idle, channel.limits.maxUsdc - (funded ? channel.view?.depositUsdc ?? 0 : 0)))}
+            minUsd={Math.max(MIN_DEPOSIT, channel.limits.minUsdc)}
+            busy={busy}
+            onFund={(v) => void fund(v)}
+            onWithdraw={() => void withdraw()}
+          />
+        </View>
+      </OmenSheet>
 
     </View>
   );
@@ -563,6 +552,4 @@ const s = StyleSheet.create({
   image: { width: 200, height: 150, borderRadius: 12 },
   fileRow: { flexDirection: "row", alignItems: "center", gap: 6, maxWidth: 220 },
   fileName: { flexShrink: 1, fontFamily: chatFonts.regular, fontSize: 14, color: colors.ice },
-  suggestion: { alignSelf: "flex-start", minHeight: 36, justifyContent: "center", paddingHorizontal: 4 },
-  suggestionText: { fontFamily: chatFonts.regular, fontSize: 14, lineHeight: 20, color: colors.muted },
 });

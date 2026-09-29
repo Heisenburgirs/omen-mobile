@@ -20,5 +20,5 @@ test("a long message is cut at a word with an ellipsis", () => {
 
 test("an empty message falls back to the attachment or a default", () => {
   assert.equal(titleFrom("", "statement.pdf"), "statement.pdf");
-  assert.equal(titleFrom("   "), "New conversation");
+  assert.equal(titleFrom("   "), "New chat");
 });

@@ -10,6 +10,7 @@ import {
   BackHandler,
   FlatList,
   Image,
+  InteractionManager,
   Keyboard,
   KeyboardAvoidingView,
   LayoutAnimation,
@@ -867,14 +868,13 @@ function Home({ active }: { active: boolean }) {
                 onPress={a.toggleHidden}
               />
             </View>
-            {/* Under the balance: the day's trading P&L ("-$0.12 24h"), then
-                the day's dividends. Both pulse while the portfolio loads. */}
             {/* One line under the balance: unrealized P&L over the open
-                positions behind its glyph, then the day's dividends behind
-                theirs (which opens the Dividends tab). 26 px, loaded or not. */}
+                positions behind its glyph; it pulses while the portfolio
+                loads. 26 px, loaded or not. Dividends live on each token's
+                page, so the day's total no longer sits here. */}
             <View style={[m.row, { gap: 20, height: 26 }]}>
               {a.positions.isPending && !p ? (
-                [0, 1].map((i) => <Skeleton key={i} height={14} width={78} />)
+                <Skeleton height={14} width={78} />
               ) : (
                 <>
                   <View
@@ -895,27 +895,6 @@ function Home({ active }: { active: boolean }) {
                       {a.hidden ? "••••" : signedUsd(p?.unrealizedUsd)}
                     </Text>
                   </View>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Dividends received today"
-                    onPress={() => a.nav({ type: "dividends" })}
-                    hitSlop={6}
-                    style={({ pressed }) => [
-                      m.row,
-                      { gap: 6, opacity: pressed ? 0.6 : 1 },
-                    ]}
-                  >
-                    <Icon name="payout" size={14} color={colors.muted} />
-                    <Text style={[m.metric, { fontSize: 16, lineHeight: 22 }]}>
-                      {a.hidden
-                        ? "••••"
-                        : p?.dividends24h == null ||
-                            Number(p.dividends24h) === 0
-                          ? "$0"
-                          : usd(p.dividends24h)}
-                    </Text>
-                    <Icon name="chevron" size={14} color={colors.muted} />
-                  </Pressable>
                 </>
               )}
             </View>
@@ -999,8 +978,12 @@ function SearchScreen({ active }: { active: boolean }) {
   const key = "omen.search." + a.address;
   // A tap before the saved state loads must win over the stale load.
   const touched = useRef(false);
+  // The list is requested once the saved sort and filters are in (a few
+  // milliseconds): requesting with the defaults first fetched it twice.
+  const [restored, setRestored] = useState(false);
   useEffect(() => {
     let cancelled = false;
+    setRestored(false);
     void SecureStore.getItemAsync(key)
       .then((value) => {
         if (cancelled || touched.current) return;
@@ -1016,7 +999,10 @@ function SearchScreen({ active }: { active: boolean }) {
           if (saved.direction === "asc") setDirection("asc");
         } catch {}
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setRestored(true);
+      });
     return () => {
       cancelled = true;
     };
@@ -1048,20 +1034,26 @@ function SearchScreen({ active }: { active: boolean }) {
   };
   // APR is a Stonk figure: the other lists rank by volume in its place.
   const listSort = type !== "tokens" && sort === "apr" ? "volume" : sort;
-  const assets = useMobile<Asset[]>(
-    "assets",
-    {
-      scope: "stonk",
-      type,
-      q: search,
-      sort: listSort,
-      direction,
-      filters: JSON.stringify(filters),
-      cursor,
-    },
-    active,
-    10000,
-  );
+  const listParams = {
+    scope: "stonk",
+    type,
+    q: search,
+    sort: listSort,
+    direction,
+    filters: JSON.stringify(filters),
+    cursor,
+  };
+  const assets = useMobile<Asset[]>("assets", listParams, active && restored, 10000);
+  // The tab is mounted from launch: its first page is fetched in the
+  // background then, so opening Search shows the list at once.
+  const prefetch = usePrefetchMobile();
+  const warmed = useRef(false);
+  useEffect(() => {
+    if (!restored || active || warmed.current) return;
+    warmed.current = true;
+    prefetch("assets", listParams, 60000);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [restored, active]);
   // Pages accumulate as the user scrolls; a new query starts over at "0".
   const [rows, setRows] = useState<Asset[]>([]);
   useEffect(() => {
@@ -1076,6 +1068,16 @@ function SearchScreen({ active }: { active: boolean }) {
   // The first page renders straight from the query so a fresh result never
   // passes through an empty frame before the accumulated rows catch up.
   const visible = rows.length ? rows : (assets.data?.data ?? []);
+  // The first screenful draws at once and the rest of the page right after,
+  // so a fresh list appears without waiting on thirty rows and their logos.
+  const FIRST_ROWS = 15;
+  const [drawn, setDrawn] = useState(FIRST_ROWS);
+  const firstMint = visible[0]?.mint;
+  useEffect(() => {
+    setDrawn(FIRST_ROWS);
+    const task = InteractionManager.runAfterInteractions(() => setDrawn(Number.MAX_SAFE_INTEGER));
+    return () => task.cancel();
+  }, [firstMint, type, search, sort, direction]);
   const loadMore = () => {
     const next = assets.data?.nextCursor;
     if (next && next !== cursor && !assets.isFetching) setCursor(next);
@@ -1293,7 +1295,7 @@ function SearchScreen({ active }: { active: boolean }) {
       <Page compact refresh={() => assets.refetch()} onEndReached={loadMore}>
         {visible.length ? (
           <View>
-            {visible.map((asset) => (
+            {visible.slice(0, drawn).map((asset) => (
               <AssetRow
                 key={asset.mint}
                 asset={asset}
@@ -1303,7 +1305,7 @@ function SearchScreen({ active }: { active: boolean }) {
               />
             ))}
           </View>
-        ) : assets.isPending || (assets.isFetching && !assets.data) ? (
+        ) : !restored || assets.isPending || (assets.isFetching && !assets.data) ? (
           // A screenful of placeholders, so the list never appears to grow
           // out of a short stub.
           <SkeletonRows plain count={12} />

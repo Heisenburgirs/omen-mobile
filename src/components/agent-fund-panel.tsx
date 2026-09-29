@@ -21,7 +21,8 @@ export function AgentFundPanel({
   onFund,
   onWithdraw,
 }: {
-  onBack: () => void;
+  /** Shown as a back row when the panel replaces another view; a sheet has its own title. */
+  onBack?: () => void;
   balanceUsd: number;
   cashUsd: number;
   /** The most that can be added now: the wallet's cash, capped by the agent's limit. */
@@ -45,7 +46,8 @@ export function AgentFundPanel({
           ? `Fund ${usd(value)}`
           : "Fund agent";
   return (
-    <View style={{ flex: 1 }}>
+    <View>
+      {onBack ? (
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Back to conversations"
@@ -57,8 +59,9 @@ export function AgentFundPanel({
         <Icon name="back" size={18} color={colors.ice} />
         <Text style={s.backText}>Fund agent</Text>
       </Pressable>
+      ) : null}
 
-      <Text style={[m.label, { marginTop: 18 }]}>Agent balance</Text>
+      <Text style={[m.label, onBack ? { marginTop: 18 } : null]}>Agent balance</Text>
       <Text numberOfLines={1} adjustsFontSizeToFit style={s.balance}>
         {usd(balanceUsd)}
       </Text>

@@ -2,7 +2,7 @@
 // that started it, short enough to read at a glance.
 const MAX = 42;
 
-export function titleFrom(text: string, fallback = "New conversation"): string {
+export function titleFrom(text: string, fallback = "New chat"): string {
   const flat = text.replace(/\s+/g, " ").trim();
   if (!flat) return fallback;
   // The first sentence carries the question; what follows is detail.

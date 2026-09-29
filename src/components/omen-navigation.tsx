@@ -17,7 +17,9 @@ export type OmenTab = "Home" | "Search" | "Dividends" | "Agent" | "Profile";
 // both platforms: the agent's memory lives in the browser or on the phone
 // and its replies are bought from Ryvo through the user's own channel. Five
 // tabs share the bar, so the selected pill is a little narrower.
-export const OMEN_TABS: OmenTab[] = ["Home", "Search", "Agent", "Dividends", "Profile"];
+// Drip left the bar on 2026-09-30: dividends are managed per token, from
+// each token's page, and the drip icon beside a holding says what it pays.
+export const OMEN_TABS: OmenTab[] = ["Home", "Search", "Agent", "Profile"];
 const icons: Partial<Record<OmenTab, IconName>> = {
   Home: "home",
   Search: "search",

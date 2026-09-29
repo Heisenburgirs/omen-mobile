@@ -184,7 +184,9 @@ export type IconName =
   | "file"
   | "compose"
   | "more"
-  | "pin";
+  | "pin"
+  | "dollar"
+  | "trash";
 export function Icon({
   name,
   size = 22,
@@ -204,7 +206,10 @@ export function Icon({
     stop: "M10 8h4a2 2 0 012 2v4a2 2 0 01-2 2h-4a2 2 0 01-2-2v-4a2 2 0 012-2z",
     image: "M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4M15.5 9.5h.01",
     file: "M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6",
-    compose: "M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4",
+    // A square open at its top-right corner, where the pen comes in.
+    compose: "M11 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2v-5M17.6 3.6a2 2 0 012.8 2.8L12 14.8l-3.6.8.8-3.6z",
+    dollar: "M12 3v18M16 7.4C15.6 5.9 14 5 12 5c-2.2 0-3.8 1.1-3.8 2.8 0 3.9 8 2 8 6.1 0 1.8-1.7 3.1-4.2 3.1-2.1 0-3.8-1-4.2-2.6",
+    trash: "M4 7h16M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13M10 11v5M14 11v5",
     more: "",
     pin: "M9 4h6M10 4v5l-3 4h10l-3-4V4M12 13v7",
     agent:
