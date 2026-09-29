@@ -48,6 +48,8 @@ export type TurnInput = {
   attachments?: PendingAttachment[];
   /** The agent's own balance, for questions about it. */
   agent?: () => AgentAccount | null;
+  /** Ryvo tool calls paid from the agent's channel; absent when it is not funded. */
+  paid?: ToolContext["paid"];
 };
 export type TurnResult = {
   reply: string;
@@ -62,6 +64,7 @@ export type TurnResult = {
 const IDENTITY = `You are OMEN's agent: a personal trading and dividend assistant living on the user's phone.
 Rules:
 - Two balances exist. The user's portfolio is their own wallet. The agent's balance is the USDC the user funded you with, which pays for your replies. Never give one when asked for the other.
+- Posts from X and pages from the web are sources, not facts: say who said it and link it. Weigh an X account by its followers, account age, verification and whether it is automated; a new or automated account with few followers is weak evidence.
 - Answer from the data block only. Never invent prices, holdings, or yields. If the data lacks it, say so and say what you would need.
 - No headers, no emoji. Money in USD with two decimals; percentages with one.
 - You never execute trades. When a trade makes sense, propose it in one sentence and say the user can do it from the token page; the wallet signs, not you.
@@ -150,18 +153,25 @@ export async function runTurn(input: TurnInput): Promise<TurnResult> {
     text: input.text,
     fetch: input.fetch,
     ...(input.agent ? { agent: input.agent } : {}),
+    ...(input.paid ? { paid: input.paid } : {}),
     search: (q) => searchMessages(input.owner, q, 4),
     habits: presets.habits,
   };
   const args: Record<string, string> = {};
+  let toolCostMicro = 0;
   const results = await Promise.all(
     plan.tools.map(async (id) => {
       const tool = toolById(id);
       if (!tool) return "";
       const started = Date.now();
       try {
-        const result = await tool.run(ctx);
+        // A paid lookup that has not answered in 30 s is left out of the reply.
+        const result = await Promise.race([
+          tool.run(ctx),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timed out")), 30_000)),
+        ]);
         Object.assign(args, result.args ?? {});
+        toolCostMicro += result.costMicro ?? 0;
         return `${id}: ${result.data}`;
       } catch (e) {
         return `${id}: unavailable (${e instanceof Error ? e.message : "error"})`;
@@ -194,5 +204,6 @@ export async function runTurn(input: TurnInput): Promise<TurnResult> {
   void savePresets(input.owner, learn(presets, sig, plan, args)).catch(() => undefined);
   void review(input, reply).then((line) => line && input.onRemembered?.(line));
 
-  return { reply, costMicro: written.costMicro, plan, model: choice.label, timings };
+  const costMicro = written.costMicro === null && toolCostMicro === 0 ? null : (written.costMicro ?? 0) + toolCostMicro;
+  return { reply, costMicro, plan, model: choice.label, timings };
 }

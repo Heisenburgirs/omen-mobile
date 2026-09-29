@@ -2,6 +2,7 @@ import type { Answer, Question } from "./jev-types";
 import { guessIntent, type Intent } from "./intent";
 import { TIER_CRITERIA, type Tier } from "./models";
 import { TOOLS, type Tool } from "./registry";
+import { xHandles, xPostId } from "./extract";
 
 // The agent's plan for one message: which tools to run and which kind of
 // answer to write. Jev is the core of it. One call asks, for every tool,
@@ -50,6 +51,9 @@ export function planFromAnswers(answers: Record<string, Answer>, tools: readonly
 
 const INTENT_TOOLS: Record<Intent, string[]> = {
   agent: ["agent_balance"],
+  x: ["x_search"],
+  chain: ["chain_lookup"],
+  web: ["web_search"],
   portfolio: ["balance"],
   dividends: ["dividends", "payouts"],
   token: ["asset"],
@@ -66,6 +70,16 @@ export function keywordPlan(text: string): Plan {
   const tools = [...INTENT_TOOLS[intent]];
   if (intent === "portfolio" && /\b(pnl|profits?|loss(es)?|perform\w*|gain\w*|up|down)\b/.test(t)) tools.push("pnl");
   if (intent === "trade" && /\b(quote|how much|price for)\b/.test(t)) tools.push("quote");
+  if (intent === "x") {
+    // A linked post, a named account, or a topic.
+    tools.length = 0;
+    if (xPostId(text)) tools.push("x_replies");
+    else if (xHandles(text).length) {
+      if (/\b(who is|profile|bio|followers|account age)\b/.test(t)) tools.push("x_profile");
+      else if (/\b(mention|mentions|mentioning|replies to|talking (?:to|about))\b/.test(t)) tools.push("x_mentions");
+      else tools.push("x_posts");
+    } else tools.push("x_search");
+  }
   const tier: Tier =
     intent === "chat"
       ? "chat"

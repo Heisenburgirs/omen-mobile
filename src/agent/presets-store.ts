@@ -9,7 +9,7 @@ export async function loadPresets(owner: string): Promise<PresetDoc> {
   if (!raw) return emptyPresets();
   try {
     const doc = JSON.parse(raw) as PresetDoc;
-    return doc?.v === 1 ? { ...emptyPresets(), ...doc } : emptyPresets();
+    return doc?.v === 2 ? { ...emptyPresets(), ...doc } : emptyPresets();
   } catch {
     return emptyPresets();
   }

@@ -8,6 +8,7 @@ import {
   recentDividends,
   type Fetcher,
 } from "./tools";
+import { EXTERNAL_TOOLS } from "./external-tools";
 
 // Everything the agent can look up or prepare, as one registry. Jev reads
 // each tool's `describe` line and says whether a message needs it; code
@@ -42,8 +43,14 @@ export type ToolContext = {
   /** Past messages matching a query, from the device. */
   search: (query: string) => Promise<{ role: string; text: string }[]>;
   habits: Habits;
+  /**
+   * A Ryvo tool call (X, web search, Solana RPC), paid from the agent's
+   * channel. Absent when the agent has no balance to pay with.
+   */
+  paid?: (tool: string, input: Record<string, unknown>) => Promise<{ data: unknown; costMicro: number | null }>;
 };
-export type ToolResult = { data: string; args?: Record<string, string> };
+/** What a tool hands the writer, and what its paid calls cost in millionths of a USDC. */
+export type ToolResult = { data: string; args?: Record<string, string>; costMicro?: number };
 
 export type Tool = {
   id: string;
@@ -199,5 +206,8 @@ export const TOOLS: Tool[] = [
     },
   },
 ];
+
+// The app's own data first, then what the agent buys per call.
+TOOLS.push(...EXTERNAL_TOOLS);
 
 export const toolById = (id: string) => TOOLS.find((t) => t.id === id);

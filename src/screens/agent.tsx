@@ -264,6 +264,7 @@ export function AgentScreen({
           }
         }) as Fetcher,
         write: channel.write,
+        ...(funded ? { paid: channel.tool } : {}),
         agent: () => ({
           state: channel.view?.state ?? "none",
           availableUsdc: channel.view?.availableUsdc ?? 0,

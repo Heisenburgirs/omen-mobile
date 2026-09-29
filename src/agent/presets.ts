@@ -12,7 +12,7 @@ import { mentionedSymbols } from "./tools";
 // usually means.
 export type Preset = { tools: string[]; tier: Tier; hits: number; last: number };
 export type PresetDoc = {
-  v: 1;
+  v: 2;
   entries: Record<string, Preset>;
   habits: Habits;
   /** How often each tool and each period has been used, for the habits. */
@@ -22,7 +22,8 @@ export const MAX_PRESETS = 120;
 /** Jev has to agree with itself this many times before a plan is reused. */
 export const TRUST_AFTER = 2;
 
-export const emptyPresets = (): PresetDoc => ({ v: 1, entries: {}, habits: {}, counts: { tools: {}, periods: {} } });
+// v2: the X, web and chain tools arrived; plans learned without them are dropped.
+export const emptyPresets = (): PresetDoc => ({ v: 2, entries: {}, habits: {}, counts: { tools: {}, periods: {} } });
 
 const STOP = new Set(
   "a an the my me i im i'm is are am was be do does did please can could would will you your yours to of for on in at it its this that these those and or so just now any some what whats what's how hows how's tell show give let me us".split(

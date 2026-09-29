@@ -1,11 +1,15 @@
+import { solanaRefs } from "./extract";
 import { mentionedSymbols } from "./tools";
 
 // What a message is about. Kept free of React Native imports so it can be
 // tested in Node; the harness asks Jev with these labels and falls back to
 // the keyword reading below.
-export type Intent = "agent" | "portfolio" | "dividends" | "token" | "trade" | "drip" | "market" | "chat";
+export type Intent = "agent" | "x" | "chain" | "web" | "portfolio" | "dividends" | "token" | "trade" | "drip" | "market" | "chat";
 export const INTENTS: Record<Intent, string> = {
   agent: "The agent's own balance: what the user funded it with, spent, or has left",
+  x: "Posts, accounts or discussion on X (Twitter)",
+  chain: "A Solana address, token mint or transaction the user gives",
+  web: "News, recent events or facts to look up on the web",
   portfolio: "Their holdings, balance, performance or what they own",
   dividends: "Dividends or payouts they received or could receive",
   token: "A specific token, stock or coin: its price, dividend, or whether to hold it",
@@ -33,6 +37,10 @@ export function isAgentBalance(text: string): boolean {
 export function guessIntent(text: string): Intent {
   const t = text.toLowerCase();
   if (isAgentBalance(t)) return "agent";
+  if (/(?:x|twitter)\.com\/|\btweets?\b|\btwitter\b|\bon x\b|\bx (?:posts?|account|handle)\b|(?:^|\s)@[a-z0-9_]{2,15}\b/.test(t)) return "x";
+  const refs = solanaRefs(text);
+  if (refs.signatures.length || refs.addresses.length) return "chain";
+  if (/\b(news|search (?:the )?web|google|look up|what happened|headlines?)\b/.test(t)) return "web";
   if (/\b(drip|reinvest)/.test(t)) return "drip";
   if (/\b(dividend|payout|paid me|yield|pays)/.test(t)) return "dividends";
   if (/\b(buy|sell|swap|trade)\b/.test(t)) return "trade";

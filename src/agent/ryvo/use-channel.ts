@@ -247,5 +247,31 @@ export function useRyvoChannel(payer: ChannelPayer) {
     [handles, refresh],
   );
 
-  return { address, ready: Boolean(address), view, limits, busy, refresh, loadLimits, fund, withdraw, write };
+  /** One Ryvo tool call (X, web search, Solana RPC), prepaid from the channel like a reply. */
+  const tool = useCallback(
+    async (id: string, input: Record<string, unknown>): Promise<{ data: unknown; costMicro: number | null }> => {
+      const { client } = await handles();
+      const { response, receipt } = await client.paidFetch(`/v1/tools/${id}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        let message = text.slice(0, 200);
+        try {
+          message = (JSON.parse(text) as { error?: { message?: string } }).error?.message ?? message;
+        } catch {
+          // Not JSON; keep the text.
+        }
+        throw new Error(`${id} failed (${response.status})${message ? `: ${message}` : ""}`);
+      }
+      const body = (await response.json()) as { data?: unknown };
+      refresh().catch(() => undefined);
+      return { data: body.data ?? null, costMicro: receipt ? Number(receipt.chargedAmount) : null };
+    },
+    [handles, refresh],
+  );
+
+  return { address, ready: Boolean(address), view, limits, busy, refresh, loadLimits, fund, withdraw, write, tool };
 }
