@@ -1,7 +1,6 @@
 import React, { useState } from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { Icon, m } from "./market-ui";
-import { RaisedButton as Button } from "./raised-button";
 import { usd } from "../domain/market";
 import { tradingColors as colors, tradingFonts as fonts } from "../theme";
 
@@ -107,26 +106,34 @@ export function AgentFundPanel({
         {usd(cashUsd)} USDC available
       </Text>
 
-      <View style={{ gap: 10, marginTop: 16 }}>
-        <Button
-          title={title}
-          busy={busy === "fund"}
-          disabled={Boolean(busy) || !value || over || under}
-          onPress={() => {
-            onFund(value);
-            setAmount("");
-          }}
-        />
-        {balanceUsd > 0.005 ? (
-          <Button
-            secondary
-            title={busy === "withdraw" ? "Withdrawing…" : `Withdraw ${usd(balanceUsd)} to wallet`}
-            busy={busy === "withdraw"}
-            disabled={Boolean(busy)}
-            onPress={onWithdraw}
-          />
-        ) : null}
-      </View>
+      <Pressable
+        accessibilityRole="button"
+        disabled={Boolean(busy) || !value || over || under}
+        onPress={() => {
+          onFund(value);
+          setAmount("");
+        }}
+        style={({ pressed }) => [
+          s.fund,
+          (Boolean(busy) || !value || over || under) && { opacity: 0.4 },
+          pressed && { opacity: 0.7 },
+        ]}
+      >
+        <Text style={s.fundText}>{title}</Text>
+      </Pressable>
+      {balanceUsd > 0.005 ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Withdraw ${usd(balanceUsd)} to your wallet`}
+          disabled={Boolean(busy)}
+          onPress={onWithdraw}
+          hitSlop={8}
+          style={({ pressed }) => [s.withdraw, { opacity: busy && busy !== "withdraw" ? 0.4 : pressed ? 0.6 : 1 }]}
+        >
+          {busy === "withdraw" ? <ActivityIndicator size="small" color={colors.muted} /> : null}
+          <Text style={s.withdrawText}>{busy === "withdraw" ? "Withdrawing…" : "Withdraw balance"}</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -167,4 +174,15 @@ const s = StyleSheet.create({
   },
   presetText: { fontFamily: fonts.medium, fontSize: 13, color: colors.ice },
   hint: { fontFamily: fonts.regular, fontSize: 12, color: colors.muted, marginTop: 10 },
+  fund: {
+    height: 40,
+    marginTop: 16,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.ice,
+  },
+  fundText: { fontFamily: fonts.medium, fontSize: 14, color: colors.canvas },
+  withdraw: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: 40, marginTop: 6, alignSelf: "flex-start" },
+  withdrawText: { fontFamily: fonts.medium, fontSize: 14, color: colors.ice },
 });

@@ -9,9 +9,11 @@ import { kvDelete, kvGet, kvSet } from "../store";
 // The delegated voucher key's seed goes to the device keystore on the
 // phone; in a browser, which has no keystore, it is sealed into the same
 // store. Losing the seed strands the channel until Ryvo's 48-hour force
-// close returns the deposit, so it is never kept only in memory.
+// close returns the deposit, so it is never kept only in memory. Clearing a
+// finished channel keeps the seed: the client in memory still signs with
+// it, and the next channel it opens names it as its voucher signer.
 const keystore = Platform.OS !== "web";
-export function channelSessionStore(scope: string): ChannelSessionStore {
+export function channelSessionStore(scope: string): ChannelSessionStore & { forget(): Promise<void> } {
   const sessionKey = `ryvo.session.${scope}`;
   const secretKey = `ryvo.voucher.${scope}`;
   const readSecret = () => (keystore ? getItemAsync(secretKey) : kvGet(secretKey));
@@ -32,6 +34,10 @@ export function channelSessionStore(scope: string): ChannelSessionStore {
       await kvSet(sessionKey, JSON.stringify({ ...session, voucherSigner }));
     },
     async clear() {
+      await kvDelete(sessionKey);
+    },
+    /** Forgets the voucher key too, for when the wallet itself is gone. */
+    async forget() {
       await kvDelete(sessionKey);
       await dropSecret();
     },

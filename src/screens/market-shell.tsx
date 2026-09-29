@@ -1575,7 +1575,7 @@ function InAppPage({ url }: { url: string }) {
         {new URL(url).hostname}
       </Text>
       {loading ? (
-        <View style={{ height: 3, backgroundColor: colors.cobalt }} />
+        <View style={{ height: 3, backgroundColor: colors.ice }} />
       ) : null}
       {failed ? (
         <Empty

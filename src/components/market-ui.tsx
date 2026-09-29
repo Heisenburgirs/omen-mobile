@@ -129,9 +129,9 @@ export const m = StyleSheet.create({
     paddingHorizontal: space.edge,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.cobalt,
+    backgroundColor: colors.ice,
     borderWidth: 1,
-    borderColor: colors.cobalt,
+    borderColor: colors.ice,
   },
   smallButton: {
     minHeight: 40,
@@ -199,7 +199,7 @@ export function Icon({
     home: "M3 10l9-7 9 7v10H15v-7H9v7H3z",
     menu: "M4 7h16M4 12h16M4 17h11",
     mic: "M12 3a3 3 0 00-3 3v6a3 3 0 006 0V6a3 3 0 00-3-3zM5.5 11a6.5 6.5 0 0013 0M12 17.5V21M9 21h6",
-    stop: "M8 8h8v8H8z",
+    stop: "M10 8h4a2 2 0 012 2v4a2 2 0 01-2 2h-4a2 2 0 01-2-2v-4a2 2 0 012-2z",
     image: "M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4M15.5 9.5h.01",
     file: "M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6",
     compose: "M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4",
@@ -300,10 +300,10 @@ export function IconButton({
         backgroundColor: quiet
           ? "transparent"
           : selected
-            ? colors.cobalt
+            ? colors.selected
             : colors.surface,
         borderWidth: quiet ? 0 : 1,
-        borderColor: selected ? colors.cobalt : colors.line,
+        borderColor: selected ? colors.selected : colors.line,
         alignItems: "center",
         justifyContent: "center",
         opacity: pressed || disabled ? 0.55 : 1,
@@ -640,9 +640,9 @@ export function TextTabs({
             borderRadius: 20,
             alignItems: "center",
             justifyContent: "center",
-            backgroundColor: label === value ? colors.cobalt : "transparent",
+            backgroundColor: label === value ? colors.selected : "transparent",
             borderWidth: 1,
-            borderColor: label === value ? colors.cobalt : "transparent",
+            borderColor: label === value ? colors.selected : "transparent",
             opacity: pressed ? 0.65 : 1,
           })}
         >

@@ -92,7 +92,7 @@ export function AgentComposer({
               { opacity: action === "send" && busy ? 0.4 : pressed ? 0.7 : 1 },
             ]}
           >
-            <Icon name={action} size={18} color={action === "send" ? colors.canvas : colors.ice} />
+            <Icon name={action} size={18} color={action === "mic" ? colors.ice : colors.canvas} />
           </Pressable>
         </View>
       </View>
@@ -144,5 +144,6 @@ const s = StyleSheet.create({
   },
   tool: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
   send: { backgroundColor: colors.ice },
-  stop: { backgroundColor: colors.cobalt },
+  // Listening: the same white as send, so the box has one live control.
+  stop: { backgroundColor: colors.ice },
 });

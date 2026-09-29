@@ -62,7 +62,7 @@ export function PrivyProvider({
         loginMethods: ["google", "wallet"],
         appearance: {
           theme: "dark",
-          accentColor: "#1119B8",
+          accentColor: "#F5F5F5",
           logo: "https://www.getomen.xyz/app/icon-192.png",
           walletChainType: "solana-only",
           walletList: ["phantom", "backpack", "solflare"],

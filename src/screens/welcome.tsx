@@ -118,7 +118,7 @@ export function WelcomeScreen({
         accessibilityIgnoresInvertColors
       />
       <LinearGradient
-        colors={["rgba(6,9,40,0)", "rgba(6,9,40,0.3)", colors.canvas]}
+        colors={["rgba(7,7,7,0)", "rgba(7,7,7,0.3)", colors.canvas]}
         locations={[0, 0.5, 1]}
         style={s.shade}
       />

@@ -5,7 +5,9 @@ export const fonts = {
   display: "Inter_600SemiBold",
 };
 
-// Neutral surfaces and cobalt controls adapted from the supplied trading kit.
+// Neutral surfaces and neutral controls: the app has no accent hue. A
+// selected control is a lighter grey, focus is off-white, and colour is
+// kept for meaning (gains, losses, cash).
 export const tradingColors = {
   // Pure neutrals: no blue bias anywhere in the surfaces, so cards read as
   // a slightly lighter black rather than navy on a calibrated screen.
@@ -16,19 +18,17 @@ export const tradingColors = {
   cardLine: "#1A1A1A",
   surface: "#121212",
   surfaceRaised: "#1C1C1C",
-  cobalt: "#1119B8",
+  /** A selected pill, tab or toggle. */
+  selected: "#2A2A2A",
   ice: "#F5F5F5",
   mist: "#C3C4C8",
   muted: "#96989F",
   line: "#262626",
-  focus: "#8187FF",
+  focus: "#E6E6E6",
   success: "#46D987",
   // Cash: Cash App's green, brighter than the P&L green.
   cash: "#00D632",
   error: "#FF6A72",
-  buttonTop: "#646CDA",
-  buttonSide: "#3038C7",
-  buttonBottom: "#080D68",
 };
 // The original navy palette is retired: every screen (welcome, sign-in,
 // wallet, account setup, launch) shares the neutral trading palette, so the

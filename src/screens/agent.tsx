@@ -246,7 +246,7 @@ export function AgentScreen({
     setTyping(true);
     try {
       const token = user ? await getAccessToken() : null;
-      const result = await runTurn({
+      const ask = () => runTurn({
         owner,
         token,
         text: clean || "(the user sent an attachment)",
@@ -266,6 +266,15 @@ export function AgentScreen({
         write: channel.write,
         onRemembered: () => showToast("Noted for next time"),
       });
+      let result;
+      try {
+        result = await ask();
+      } catch (e) {
+        if (!(e instanceof Error && /voucher signer does not match/i.test(e.message))) throw e;
+        showToast("Moving your agent's balance to a fresh channel…");
+        await rekey();
+        result = await ask();
+      }
       const reply = await addMessage(owner, id, "agent", result.reply, result.costMicro);
       history.current = [...history.current, mine, reply].slice(-80);
       setMessages((all) => [...all, shown(reply)]);
@@ -287,10 +296,9 @@ export function AgentScreen({
     }
   };
 
-  /** Moves the agent wallet's idle USDC back to the user's wallet, waiting for at least `expect` to be there first. */
-  const sweep = useCallback(
+  /** The agent wallet's idle USDC once at least `expect` has arrived there, or what is there after 45 s. */
+  const idleAtLeast = useCallback(
     async (expect: number) => {
-      if (!agent.address || !primary) throw new Error("Your wallet is still being prepared.");
       let have = 0;
       const until = Date.now() + 45000;
       do {
@@ -298,13 +306,39 @@ export function AgentScreen({
         if (have + 0.01 >= expect && have > 0) break;
         await new Promise((r) => setTimeout(r, 2000));
       } while (Date.now() < until);
+      return have;
+    },
+    [idleRef],
+  );
+
+  /** Moves the agent wallet's idle USDC back to the user's wallet, waiting for at least `expect` to be there first. */
+  const sweep = useCallback(
+    async (expect: number) => {
+      if (!agent.address || !primary) throw new Error("Your wallet is still being prepared.");
+      const have = await idleAtLeast(expect);
       if (have <= 0) return 0;
       if (have + 0.01 < expect) throw new Error("The refund hasn't landed yet. Try Withdraw again in a moment.");
       await actions.transfer({ mint: USDC, to: primary, amount: usdcAmount(have), wallet: agent.address });
       return have;
     },
-    [agent.address, primary, idleRef, actions],
+    [agent.address, primary, idleAtLeast, actions],
   );
+
+  /**
+   * A channel whose voucher key this phone no longer holds cannot pay for a
+   * reply, but its wallet can still close it. The unspent balance comes back
+   * to the agent's wallet and goes straight into a new channel under the
+   * key the phone has now; nothing leaves for the user's wallet.
+   */
+  const rekey = async () => {
+    const refund = channel.view?.availableUsdc ?? 0;
+    const closed = await channel.withdraw();
+    if (closed.closeDeadline) throw new Error("Your agent's balance is on its way back and returns within 48 hours.");
+    const have = await idleAtLeast(refund);
+    if (have < 0.01) throw new Error("Your agent's balance hasn't come back yet. Try again in a moment.");
+    await channel.fund(have);
+    await refreshIdle();
+  };
 
   const fund = async (value: number) => {
     setBusy("fund");

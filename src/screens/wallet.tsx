@@ -103,7 +103,7 @@ export function WalletScreen({
             refreshing={balance.isRefetching}
             onRefresh={() => void balance.refetch()}
             tintColor={colors.ice}
-            colors={[colors.cobalt]}
+            colors={[colors.ice]}
           />
         }
       >
@@ -405,7 +405,7 @@ const s = StyleSheet.create({
     maxWidth: "44%",
   },
   note: { flexDirection: "row", gap: 15, paddingTop: 28, paddingRight: 16 },
-  noteRule: { width: 2, backgroundColor: colors.cobalt },
+  noteRule: { width: 2, backgroundColor: colors.mist },
   bottom: { marginTop: "auto", paddingTop: 52 },
   address: { fontFamily: fonts.medium, fontSize: 15, color: colors.mist },
   errorPanel: {

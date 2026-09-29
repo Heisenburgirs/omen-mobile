@@ -140,7 +140,7 @@ const s = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: colors.surface, padding: 16, borderRadius: 14, borderWidth: 1, borderColor: colors.line },
   pressed: { backgroundColor: colors.surfaceRaised },
   icon: { width: 44, height: 44, borderRadius: 12 },
-  placeholder: { backgroundColor: colors.cobalt, alignItems: 'center', justifyContent: 'center' },
+  placeholder: { backgroundColor: colors.surfaceRaised, alignItems: 'center', justifyContent: 'center' },
   name: { fontFamily: fonts.medium, fontSize: 16, color: colors.ice },
   small: { fontFamily: fonts.regular, fontSize: 13, color: colors.mist },
   arrow: { fontSize: 26, color: colors.muted },
