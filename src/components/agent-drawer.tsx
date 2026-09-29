@@ -25,6 +25,7 @@ export function AgentDrawer({
   onClose,
   balanceUsd,
   hidden,
+  funding,
   onFund,
   conversations,
   currentId,
@@ -36,6 +37,8 @@ export function AgentDrawer({
   onClose: () => void;
   balanceUsd: number;
   hidden: boolean;
+  /** A deposit is on its way in; Fund waits for it. */
+  funding?: boolean;
   onFund: () => void;
   conversations: Conversation[];
   currentId: string | null;
@@ -81,10 +84,11 @@ export function AgentDrawer({
             <Pressable
               accessibilityRole="button"
               onPress={onFund}
+              disabled={funding}
               hitSlop={8}
               style={({ pressed }) => [s.fund, { opacity: pressed ? 0.6 : 1 }]}
             >
-              <Text style={s.fundText}>Fund</Text>
+              <Text style={[s.fundText, funding && { color: colors.muted }]}>{funding ? "Funding…" : "Fund"}</Text>
             </Pressable>
           </View>
 

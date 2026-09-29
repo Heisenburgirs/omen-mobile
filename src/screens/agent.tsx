@@ -172,6 +172,9 @@ export function AgentScreen({
   const [pending, setPending] = useState<PendingAttachment[]>([]);
   const [typing, setTyping] = useState(false);
   const [busy, setBusy] = useState<"fund" | "withdraw" | null>(null);
+  // A deposit on its way in, counted in the balance from the tap so the menu
+  // answers at once while the transfer and the channel settle behind it.
+  const [pendingFund, setPendingFund] = useState(0);
 
   const closeDrawer = () => {
     setDrawer(false);
@@ -208,6 +211,10 @@ export function AgentScreen({
     const clean = text.trim();
     const attachments = pending;
     if ((!clean && !attachments.length) || typing) return;
+    if (busy === "fund" && !funded) {
+      showToast("Your agent is being funded. One moment.");
+      return;
+    }
     if (!owner) {
       showToast("Your wallet is still being prepared. Try again in a moment.");
       return;
@@ -301,26 +308,27 @@ export function AgentScreen({
 
   const fund = async (value: number) => {
     setBusy("fund");
+    setPendingFund(value);
+    setFundView(false);
     try {
       // The agent's wallet first (made now if it is the first time), then
       // USDC from the user's wallet into it, then into the channel. USDC
       // already in the agent's wallet is used before any leaves the user's.
-      const address = await agent.ensure();
+      const [address, token] = await Promise.all([agent.ensure(), user ? getAccessToken() : null]);
       const have = await idleRef.current().catch(() => 0);
       const need = value - have;
       if (need > 0.000001) {
-        const token = user ? await getAccessToken() : null;
         const signature = await actions.transfer({ mint: USDC, to: address, amount: usdcAmount(need) });
         await waitConfirmed(signature, token);
       }
       const next = await channel.fund(value);
-      setFundView(false);
       showToast(`Agent funded: ${usd(next.availableUsdc)} available`);
     } catch (e) {
       closeDrawer();
       agentSays(`Funding stopped: ${e instanceof Error ? e.message : "something went wrong."}`);
     } finally {
       await refreshIdle();
+      setPendingFund(0);
       setBusy(null);
     }
   };
@@ -437,8 +445,9 @@ export function AgentScreen({
 
       <AgentDrawer
         visible={drawer}
-        onClose={() => !busy && closeDrawer()}
-        balanceUsd={balance}
+        onClose={closeDrawer}
+        balanceUsd={balance + pendingFund}
+        funding={busy === "fund"}
         hidden={hidden}
         onFund={() => {
           setFundView(true);

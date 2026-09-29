@@ -56,10 +56,10 @@ export const space = {
 export const radius = { small: 8, field: 24, panel: 14, pill: 999 };
 
 /**
- * The agent conversation: Atkinson Hyperlegible Next, a typeface drawn for
- * reading, so long replies stay easy on the eye next to the trading UI.
+ * The agent conversation: Inter, whose plain figures and open shapes keep
+ * long replies easy to read next to the trading UI.
  */
 export const chatFonts = {
-  regular: "AtkinsonHyperlegibleNext_400Regular",
-  medium: "AtkinsonHyperlegibleNext_500Medium",
+  regular: "Inter_400Regular",
+  medium: "Inter_500Medium",
 };

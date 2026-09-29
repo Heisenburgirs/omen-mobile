@@ -104,7 +104,7 @@ export function AgentFundPanel({
         </Pressable>
       </View>
       <Text style={s.hint}>
-        Minimum {usd(minUsd)}. {usd(cashUsd)} USDC in your wallet.
+        {usd(cashUsd)} USDC available
       </Text>
 
       <View style={{ gap: 10, marginTop: 16 }}>
