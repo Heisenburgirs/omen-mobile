@@ -176,7 +176,13 @@ export type IconName =
   | "copy"
   | "cash"
   | "x"
-  | "check";
+  | "check"
+  | "menu"
+  | "mic"
+  | "stop"
+  | "image"
+  | "file"
+  | "compose";
 export function Icon({
   name,
   size = 22,
@@ -191,6 +197,12 @@ export function Icon({
 }) {
   const paths: Record<string, string> = {
     home: "M3 10l9-7 9 7v10H15v-7H9v7H3z",
+    menu: "M4 7h16M4 12h16M4 17h11",
+    mic: "M12 3a3 3 0 00-3 3v6a3 3 0 006 0V6a3 3 0 00-3-3zM5.5 11a6.5 6.5 0 0013 0M12 17.5V21M9 21h6",
+    stop: "M8 8h8v8H8z",
+    image: "M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4M15.5 9.5h.01",
+    file: "M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6",
+    compose: "M4 20h4L19 9l-4-4L4 16zM13.5 6.5l4 4",
     agent:
       "M12 3v3M8 3h8M7 7h10a3 3 0 013 3v8a3 3 0 01-3 3H7a3 3 0 01-3-3v-8a3 3 0 013-3zM8 12v2m8-2v2m-7 3h6M1 12v4m22-4v4",
     search: "M21 21l-5-5",

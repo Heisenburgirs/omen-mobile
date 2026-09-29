@@ -7,6 +7,7 @@ import { loadPresets, savePresets } from "./presets-store";
 import { TOOLS, toolById, type ToolContext } from "./registry";
 import { searchMessages, type StoredMessage } from "./store";
 import type { Fetcher } from "./tools";
+import { attachmentContext, type PendingAttachment } from "./attachments";
 export { guessIntent, type Intent } from "./intent";
 
 // One turn of the agent. Jev decides, code does, a model writes:
@@ -41,6 +42,8 @@ export type TurnInput = {
   write: Writer;
   /** Called after the reply is shown if the turn added a line to USER.md. */
   onRemembered?: (line: string) => void;
+  /** Photos and files attached to this message. */
+  attachments?: PendingAttachment[];
 };
 export type TurnResult = {
   reply: string;
@@ -158,7 +161,7 @@ export async function runTurn(input: TurnInput): Promise<TurnResult> {
       }
     }),
   );
-  const data = results.filter(Boolean);
+  const data = [...results.filter(Boolean), ...attachmentContext(input.attachments ?? [])];
 
   // 3. Write, with the model the kind of answer calls for.
   const choice = MODELS[plan.tier];

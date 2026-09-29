@@ -59,6 +59,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
     OmenUI_400Regular: require("../assets/fonts/OmenUI-Regular.ttf"),
     OmenUI_500Medium: require("../assets/fonts/OmenUI-Medium.ttf"),
     OmenUI_600SemiBold: require("../assets/fonts/OmenUI-SemiBold.ttf"),
+    AtkinsonHyperlegibleNext_400Regular: require("../assets/fonts/AtkinsonHyperlegibleNext_400Regular.ttf"),
+    AtkinsonHyperlegibleNext_500Medium: require("../assets/fonts/AtkinsonHyperlegibleNext_500Medium.ttf"),
     ...webFonts,
   });
   const [queryClient] = useState(

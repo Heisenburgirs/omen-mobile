@@ -1,36 +1,48 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import {
-  Keyboard,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
-import { Icon, m } from "../components/market-ui";
+import { Image, Keyboard, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Icon, IconButton, m } from "../components/market-ui";
 import { OmenSheet } from "../components/omen-sheet";
-import { RaisedButton as Button } from "../components/raised-button";
+import { AgentDrawer } from "../components/agent-drawer";
+import { AgentComposer } from "../components/agent-composer";
+import { AgentFundSheet } from "../components/agent-fund-sheet";
 import { usd } from "../domain/market";
-import {
-  tradingColors as colors,
-  tradingFonts as fonts,
-  space,
-} from "../theme";
+import { USDC } from "../domain/models";
+import { tradingColors as colors, tradingFonts as fonts, chatFonts, space } from "../theme";
 import { showToast } from "../lib/toast";
 import { mobileFetch, useMobile } from "../lib/mobile-api";
 import { useEmbeddedSolanaWallet, usePrivy } from "../lib/privy";
 import { useChainActions } from "../lib/chain-actions";
+import { runTurn } from "../agent/harness";
+import type { Fetcher } from "../agent/tools";
+import {
+  addMessage,
+  createConversation,
+  listConversations,
+  listMessages,
+  touchConversation,
+  type Attachment,
+  type Conversation,
+  type StoredMessage,
+} from "../agent/store";
+import { pickFile, pickImage, storedAttachment, type PendingAttachment } from "../agent/attachments";
+import { useVoiceInput } from "../agent/voice";
 import { isUnlocked, lockIdentity, unlockIdentity } from "../agent/identity";
 import { useLatest } from "../agent/use-latest";
 import { messageSigner, type WalletProvider } from "../agent/ryvo/wallet-signer";
-import { USDC } from "../domain/models";
-import { runTurn } from "../agent/harness";
-import type { Fetcher } from "../agent/tools";
-import { addMessage, listMessages, type StoredMessage } from "../agent/store";
 import { useAgentWallet } from "../agent/agent-wallet";
 import { useRyvoChannel } from "../agent/ryvo/use-channel";
-import { fromMicro } from "../agent/ryvo/config";
+
+const GREETING = "What are we trading today, anon?";
+const SUGGESTIONS = ["What paid me this week?", "How is my portfolio doing?", "Should I buy more ZEC?"];
+const UNFUNDED = "Fund me with USDC to get started: open the menu and tap Fund.";
+
+type Shown = { id: number; from: "agent" | "user"; text: string; attachments?: Attachment[] };
+const shown = (m: StoredMessage): Shown => ({
+  id: m.id,
+  from: m.role,
+  text: m.text,
+  ...(m.attachments ? { attachments: m.attachments } : {}),
+});
 
 /** A USDC amount as the transfer API takes it: up to six decimals, no trailing zeros. */
 const usdcAmount = (n: number) => n.toFixed(6).replace(/\.?0+$/, "");
@@ -50,77 +62,44 @@ async function waitConfirmed(signature: string, token: string | null, ms = 60000
   throw new Error("The transfer is taking longer than usual. Try again in a moment.");
 }
 
-const GREETING = "What are we trading today, anon?";
-const SUGGESTIONS = [
-  "What paid me this week?",
-  "Find tokens that pay in ZEC",
-  "How is my portfolio doing?",
-];
-const UNFUNDED = "Fund me with USDC to get started. Tap Fund.";
-
-type Shown = { id: number; from: "agent" | "user"; text: string; costMicro?: number | null; note?: string };
-const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
-const shown = (m: StoredMessage): Shown => ({ id: m.id, from: m.role, text: m.text, costMicro: m.costMicro });
-const stateLabel: Record<string, string> = {
-  none: "Not funded",
-  opening: "Funding…",
-  open: "",
-  closing: "Withdrawing…",
-  sealed: "Withdrawing…",
-  distributed: "Withdrawn",
-  reclaimed: "Withdrawn",
-};
-
 /**
- * The Agent tab: a conversation with the user's own agent, and its balance
- * at the top with Fund beside it. The agent's memory and history stay on
- * this device; its replies are written by a model on Ryvo, each one prepaid
- * from a USDC payment channel the user funds from their wallet and can close
- * at any time. Funding and withdrawing share one sheet.
+ * The Agent tab: one conversation on screen, the rest in the side menu with
+ * the agent's balance and Fund. Opening the app starts a new conversation.
+ * The agent's memory and every conversation stay on this device, sealed
+ * under the user's wallet key; its replies are bought from Ryvo, prepaid
+ * from the USDC the user funds it with.
  */
 export function AgentScreen({
   hidden,
   cashUsd,
 }: {
   hidden: boolean;
-  /** The wallet's cash, which a deposit would draw on. */
+  /** The wallet's cash, which funding draws on. */
   cashUsd: number;
 }) {
   const { user, getAccessToken } = usePrivy();
   const agent = useAgentWallet();
   const channel = useRyvoChannel(agent);
   const actions = useChainActions();
-  // The user's own wallets: the primary is where withdrawn USDC goes back
-  // to, and the key the agent's memory is filed under on this device.
   const wallets = useMobile<{ address: string; primary: boolean }[]>("wallets", {}, Boolean(user), 60000);
   const primary = wallets.data?.data.find((w) => w.primary)?.address ?? wallets.data?.data[0]?.address ?? null;
   const owner = primary;
-  const balance = channel.view?.availableUsdc ?? 0;
   const funded = channel.view?.state === "open";
-  // USDC in the agent's wallet but not in the channel: what a withdrawal
-  // leaves there until it is moved back, or a funding that stopped halfway.
+
+  // USDC in the agent's wallet but not in the channel: a funding that
+  // stopped halfway, or a refund on its way back. It counts as the agent's.
   const [idle, setIdle] = useState(0);
-  const idleUsdc = agent.idleUsdc;
-  const idleRef = useLatest(idleUsdc);
+  const idleRef = useLatest(agent.idleUsdc);
   const refreshIdle = useCallback(() => idleRef.current().then(setIdle).catch(() => undefined), [idleRef]);
   useEffect(() => {
     void refreshIdle();
   }, [agent.address, refreshIdle]);
+  const balance = (funded ? channel.view?.availableUsdc ?? 0 : 0) + idle;
 
-  const [transfer, setTransfer] = useState(false);
-  // Which way the money goes: into the agent, or back out to the wallet.
-  const [direction, setDirection] = useState<"fund" | "withdraw">("fund");
-  const [amount, setAmount] = useState("");
-  const value = Number(amount) || 0;
-  const roomUsdc = Math.max(0, channel.limits.maxUsdc - (channel.view?.depositUsdc ?? 0));
-  // Idle USDC in the agent's wallet is used before anything leaves the user's.
-  const available = Math.min(cashUsd + idle, roomUsdc);
-  const over = value > available + 1e-6;
-  const under = value > 0 && value < channel.limits.minUsdc && !funded;
   // The keyboard covers the bottom of the window and nothing resizes for it
-  // here, so the screen lifts its own bottom edge by however much of it the
-  // keyboard overlaps (the tab bar below the screen is already out of the way).
+  // here, so the screen lifts its own bottom edge by however much it overlaps.
   const root = useRef<View>(null);
+  const list = useRef<ScrollView>(null);
   const [lift, setLift] = useState(0);
   useEffect(() => {
     const shownListener = Keyboard.addListener("keyboardDidShow", (e) => {
@@ -136,18 +115,9 @@ export function AgentScreen({
     };
   }, []);
 
-  const [messages, setMessages] = useState<Shown[]>([{ id: 0, from: "agent", text: GREETING }]);
-  const history = useRef<StoredMessage[]>([]);
-  const [draft, setDraft] = useState("");
-  const [typing, setTyping] = useState(false);
-  const list = useRef<ScrollView>(null);
-  const localId = useRef(-1);
-
-  // The agent's identity opens with one signature from the user's wallet:
-  // everything it remembers is sealed under that key on this device.
+  // The agent's identity opens with one signature from the user's wallet.
   const embedded = useEmbeddedSolanaWallet();
   const signerAccount = primary ? (embedded.wallets ?? []).find((w) => w.address === primary) : undefined;
-  // The account object is new on every render; the effect keys on its address.
   const signerRef = useLatest(signerAccount);
   const signerAddress = signerAccount?.address ?? null;
   const [identity, setIdentity] = useState<"locked" | "unlocking" | "open" | "failed">("locked");
@@ -177,100 +147,132 @@ export function AgentScreen({
     };
   }, [owner, signerAddress, attempt, signerRef]);
 
-  // The conversation so far, from the device, once the identity is open.
-  useEffect(() => {
+  // Conversations. `conversationId` is null for the new one on screen until
+  // its first message saves it.
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<Shown[]>([]);
+  const history = useRef<StoredMessage[]>([]);
+  const localId = useRef(-1);
+  const reloadConversations = useCallback(async () => {
     if (!owner || identity !== "open") return;
-    let cancelled = false;
-    listMessages(owner)
-      .then((stored) => {
-        if (cancelled) return;
-        history.current = stored;
-        setMessages(stored.length ? stored.map(shown) : [{ id: 0, from: "agent", text: GREETING }]);
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
+    setConversations(await listConversations(owner).catch(() => []));
   }, [owner, identity]);
+  useEffect(() => {
+    void reloadConversations();
+  }, [reloadConversations]);
 
-  const send = useCallback(
-    async (text: string) => {
-      const clean = text.trim();
-      if (!clean || typing) return;
-      setDraft("");
-      if (!owner) {
-        showToast("Your wallet is still being prepared. Try again in a moment.");
-        return;
-      }
-      if (identity !== "open") {
-        showToast(identity === "failed" ? "Sign to unlock your agent first." : "Unlocking your agent…");
-        return;
-      }
-      const mine = await addMessage(owner, "user", clean).catch(() => null);
-      const userMessage: StoredMessage = mine ?? { id: localId.current--, role: "user", text: clean, costMicro: null, createdAt: Date.now() };
-      setMessages((all) => [...all, shown(userMessage)]);
-      if (!funded) {
-        setMessages((all) => [...all, { id: localId.current--, from: "agent", text: UNFUNDED }]);
-        return;
-      }
-      setTyping(true);
-      const started = Date.now();
-      try {
-        const token = user ? await getAccessToken() : null;
-        const tokenMs = Date.now() - started;
-        const result = await runTurn({
-          owner,
-          token,
-          text: clean,
-          history: history.current,
-          // A lookup that has not answered in 8 s is left out of the reply
-          // rather than holding it up.
-          fetch: (async (resource: string, params: Record<string, string> = {}) => {
-            const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), 8000);
-            try {
-              return await mobileFetch(resource, params, token, controller.signal);
-            } finally {
-              clearTimeout(timer);
-            }
-          }) as Fetcher,
-          write: channel.write,
-          onRemembered: () => showToast("Noted for next time"),
-        });
-        const reply = (await addMessage(owner, "agent", result.reply, result.costMicro).catch(() => null)) ?? {
-          id: localId.current--,
-          role: "agent" as const,
-          text: result.reply,
-          costMicro: result.costMicro,
-          createdAt: Date.now(),
-        };
-        history.current = [...history.current, userMessage, reply].slice(-60);
-        const note = [
-          `${result.model} (${result.plan.source})`,
-          `token ${seconds(tokenMs)}`,
-          ...result.timings.map((t) => `${t.label} ${seconds(t.ms)}`),
-          `total ${seconds(Date.now() - started)}`,
-        ].join(" · ");
-        setMessages((all) => [...all, { ...shown(reply), note }]);
-      } catch (e) {
-        const why = e instanceof Error ? e.message : "Something went wrong.";
-        setMessages((all) => [...all, { id: localId.current--, from: "agent", text: `I couldn't answer that: ${why}` }]);
-      } finally {
-        setTyping(false);
-      }
-    },
-    [typing, owner, identity, funded, user, getAccessToken, channel.write],
-  );
-  const fresh = messages.length === 1;
+  const [drawer, setDrawer] = useState(false);
+  const [fundSheet, setFundSheet] = useState(false);
+  const [attachSheet, setAttachSheet] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [pending, setPending] = useState<PendingAttachment[]>([]);
+  const [typing, setTyping] = useState(false);
+  const [busy, setBusy] = useState<"fund" | "withdraw" | null>(null);
 
-  const openSheet = () => {
-    setDirection("fund");
-    setAmount("");
-    setTransfer(true);
-    void channel.loadLimits();
+  const openConversation = async (id: string) => {
+    setDrawer(false);
+    if (!owner) return;
+    const stored = await listMessages(owner, id).catch(() => []);
+    history.current = stored;
+    setMessages(stored.map(shown));
+    setConversationId(id);
   };
-  const [moving, setMoving] = useState(false);
-  const working = channel.busy || moving;
+  const startNew = () => {
+    setDrawer(false);
+    setConversationId(null);
+    history.current = [];
+    setMessages([]);
+    setDraft("");
+    setPending([]);
+  };
+
+  // Speaking fills the draft: what was typed stays, what is said follows it.
+  const voiceBase = useRef("");
+  const voice = useVoiceInput((text) => setDraft(voiceBase.current + text));
+  const toggleVoice = () => {
+    if (!voice.listening) voiceBase.current = draft.trim() ? `${draft.trim()} ` : "";
+    void voice.toggle();
+  };
+
+  const agentSays = (text: string) => setMessages((all) => [...all, { id: localId.current--, from: "agent", text }]);
+
+  const send = async (text: string) => {
+    const clean = text.trim();
+    const attachments = pending;
+    if ((!clean && !attachments.length) || typing) return;
+    if (!owner) {
+      showToast("Your wallet is still being prepared. Try again in a moment.");
+      return;
+    }
+    if (identity !== "open") {
+      showToast(identity === "failed" ? "Tap to unlock your agent first." : "Unlocking your agent…");
+      return;
+    }
+    setDraft("");
+    setPending([]);
+    let id = conversationId;
+    try {
+      if (!id) {
+        const created = await createConversation(owner, clean || attachments[0]?.name || "New conversation");
+        id = created.id;
+        setConversationId(id);
+      }
+    } catch {
+      showToast("Couldn't start the conversation. Try again.");
+      return;
+    }
+    const mine = await addMessage(owner, id, "user", clean, null, attachments.map(storedAttachment));
+    setMessages((all) => [...all, shown(mine)]);
+    void touchConversation(id).then(reloadConversations);
+    if (!funded) {
+      agentSays(UNFUNDED);
+      return;
+    }
+    setTyping(true);
+    try {
+      const token = user ? await getAccessToken() : null;
+      const result = await runTurn({
+        owner,
+        token,
+        text: clean || "(the user sent an attachment)",
+        attachments,
+        history: history.current,
+        // A lookup that has not answered in 8 s is left out of the reply
+        // rather than holding it up.
+        fetch: (async (resource: string, params: Record<string, string> = {}) => {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 8000);
+          try {
+            return await mobileFetch(resource, params, token, controller.signal);
+          } finally {
+            clearTimeout(timer);
+          }
+        }) as Fetcher,
+        write: channel.write,
+        onRemembered: () => showToast("Noted for next time"),
+      });
+      const reply = await addMessage(owner, id, "agent", result.reply, result.costMicro);
+      history.current = [...history.current, mine, reply].slice(-80);
+      setMessages((all) => [...all, shown(reply)]);
+      void touchConversation(id).then(reloadConversations);
+    } catch (e) {
+      agentSays(`I couldn't answer that: ${e instanceof Error ? e.message : "something went wrong."}`);
+    } finally {
+      setTyping(false);
+    }
+  };
+
+  const attach = async (pick: () => Promise<PendingAttachment | null>) => {
+    setAttachSheet(false);
+    try {
+      const picked = await pick();
+      if (picked) setPending((all) => [...all, picked].slice(0, 4));
+    } catch {
+      showToast("Couldn't attach that. Try again.");
+    }
+  };
+
   /** Moves the agent wallet's idle USDC back to the user's wallet, waiting for at least `expect` to be there first. */
   const sweep = useCallback(
     async (expect: number) => {
@@ -278,105 +280,83 @@ export function AgentScreen({
       let have = 0;
       const until = Date.now() + 45000;
       do {
-        have = await idleUsdc().catch(() => 0);
+        have = await idleRef.current().catch(() => 0);
         if (have + 0.01 >= expect && have > 0) break;
         await new Promise((r) => setTimeout(r, 2000));
       } while (Date.now() < until);
-      if (have <= 0) throw new Error("The agent's wallet is empty.");
-      if (have + 0.01 < expect) throw new Error("The refund hasn't landed yet. Use Move to wallet in a moment.");
+      if (have <= 0) return 0;
+      if (have + 0.01 < expect) throw new Error("The refund hasn't landed yet. Try Withdraw again in a moment.");
       await actions.transfer({ mint: USDC, to: primary, amount: usdcAmount(have), wallet: agent.address });
-      await refreshIdle();
       return have;
     },
-    [agent.address, primary, idleUsdc, actions, refreshIdle],
+    [agent.address, primary, idleRef, actions],
   );
-  /** A failure the user can read later: in the thread, not only a toast. */
-  const report = (what: string, e: unknown) => {
-    const why = e instanceof Error && e.message ? e.message : "Something went wrong.";
-    showToast(why);
-    setMessages((all) => [...all, { id: localId.current--, from: "agent", text: `${what}: ${why}` }]);
-  };
-  const submit = async () => {
-    setMoving(true);
+
+  const fund = async (value: number) => {
+    setBusy("fund");
     try {
-      if (direction === "fund") {
-        // The agent's wallet first (made now if it is the first time), then
-        // USDC from the user's wallet into it, then into the channel. USDC
-        // already in the agent's wallet is used before any leaves the user's.
-        const address = await agent.ensure();
-        const have = await idleUsdc().catch(() => 0);
-        const need = value - have;
-        if (need > 0.000001) {
-          const token = user ? await getAccessToken() : null;
-          const signature = await actions.transfer({ mint: USDC, to: address, amount: usdcAmount(need) });
-          await waitConfirmed(signature, token);
-        }
-        const next = await channel.fund(value);
-        await refreshIdle();
-        setTransfer(false);
-        setAmount("");
-        showToast(next.state === "open" ? `Agent funded: ${usd(next.availableUsdc)} available` : "Funding…");
-      } else {
-        const refund = channel.view?.availableUsdc ?? 0;
+      // The agent's wallet first (made now if it is the first time), then
+      // USDC from the user's wallet into it, then into the channel. USDC
+      // already in the agent's wallet is used before any leaves the user's.
+      const address = await agent.ensure();
+      const have = await idleRef.current().catch(() => 0);
+      const need = value - have;
+      if (need > 0.000001) {
+        const token = user ? await getAccessToken() : null;
+        const signature = await actions.transfer({ mint: USDC, to: address, amount: usdcAmount(need) });
+        await waitConfirmed(signature, token);
+      }
+      const next = await channel.fund(value);
+      setFundSheet(false);
+      showToast(`Agent funded: ${usd(next.availableUsdc)} available`);
+    } catch (e) {
+      setFundSheet(false);
+      agentSays(`Funding stopped: ${e instanceof Error ? e.message : "something went wrong."}`);
+    } finally {
+      await refreshIdle();
+      setBusy(null);
+    }
+  };
+
+  const withdraw = async () => {
+    setBusy("withdraw");
+    try {
+      // Closing returns the unspent deposit to the agent's wallet; from
+      // there it goes back to the user's, with anything else idle there.
+      const refund = funded ? channel.view?.availableUsdc ?? 0 : 0;
+      if (funded) {
         const next = await channel.withdraw();
         if (next.closeDeadline) {
-          setTransfer(false);
+          setFundSheet(false);
           showToast("Withdrawal started. Funds return within 48 hours.");
           return;
         }
-        const moved = await sweep(refund);
-        setTransfer(false);
-        showToast(`${usd(moved)} returned to your wallet`);
       }
+      const moved = await sweep(refund);
+      setFundSheet(false);
+      showToast(moved > 0 ? `${usd(moved)} returned to your wallet` : "Nothing to withdraw");
     } catch (e) {
-      setTransfer(false);
-      report(direction === "fund" ? "Funding stopped" : "Withdrawal stopped", e);
-      void refreshIdle();
+      setFundSheet(false);
+      agentSays(`Withdrawal stopped: ${e instanceof Error ? e.message : "something went wrong."}`);
     } finally {
-      setMoving(false);
+      await refreshIdle();
+      await channel.refresh().catch(() => undefined);
+      setBusy(null);
     }
   };
-  const moveIdle = async () => {
-    setMoving(true);
-    try {
-      const moved = await sweep(0);
-      setTransfer(false);
-      showToast(`${usd(moved)} returned to your wallet`);
-    } catch (e) {
-      setTransfer(false);
-      report("Withdrawal stopped", e);
-    } finally {
-      setMoving(false);
-    }
-  };
-  const label = stateLabel[channel.view?.state ?? "none"] ?? "";
+
+  const title = conversationId ? conversations.find((c) => c.id === conversationId)?.title : undefined;
 
   return (
     <View ref={root} collapsable={false} style={{ flex: 1, paddingBottom: lift }}>
-      {/* The agent's own balance, and moving money in and out of it. */}
-      <View style={[m.between, s.header]}>
-        <View style={{ gap: 2 }}>
-          <Text style={m.label}>{identity === "unlocking" ? "Unlocking agent…" : "Agent balance"}</Text>
-          <Text numberOfLines={1} style={s.balance}>
-            {hidden ? "••••" : channel.view ? usd(balance) : "—"}
-          </Text>
-          {label || idle > 0.005 ? (
-            <Text style={[m.muted, { fontSize: 12 }]}>
-              {[label, idle > 0.005 ? `${usd(idle)} ready to add` : ""].filter(Boolean).join(" · ")}
-            </Text>
-          ) : null}
-        </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Fund or withdraw from the agent"
-          disabled={!user || !primary}
-          onPress={openSheet}
-          hitSlop={10}
-          style={({ pressed }) => [s.fund, { opacity: !user || !primary ? 0.4 : pressed ? 0.6 : 1 }]}
-        >
-          <Text style={[m.link, { color: colors.ice, fontSize: 15 }]}>{funded ? "Manage" : "Fund"}</Text>
-        </Pressable>
+      <View style={s.header}>
+        <IconButton name="menu" label="Conversations and agent balance" quiet onPress={() => setDrawer(true)} />
+        <Text numberOfLines={1} style={s.headerTitle}>
+          {identity === "unlocking" ? "Unlocking…" : title ?? ""}
+        </Text>
+        <IconButton name="compose" label="New conversation" quiet onPress={startNew} />
       </View>
+
       <ScrollView
         ref={list}
         style={{ flex: 1 }}
@@ -385,19 +365,38 @@ export function AgentScreen({
         showsVerticalScrollIndicator={false}
         onContentSizeChange={() => list.current?.scrollToEnd({ animated: true })}
       >
+        {messages.length === 0 ? (
+          <View style={{ gap: 10 }}>
+            <View style={[s.bubble, s.theirs]}>
+              <Text style={s.body}>{GREETING}</Text>
+            </View>
+            {SUGGESTIONS.map((text) => (
+              <Pressable
+                key={text}
+                accessibilityRole="button"
+                onPress={() => void send(text)}
+                style={({ pressed }) => [s.suggestion, { opacity: pressed ? 0.6 : 1 }]}
+              >
+                <Text style={s.suggestionText}>{text}</Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
         {messages.map((message) => (
-          <View
-            key={message.id}
-            style={[s.bubble, message.from === "user" ? s.mine : s.theirs]}
-          >
-            <Text style={[m.text, { lineHeight: 21 }]}>{message.text}</Text>
-            {message.costMicro != null || message.note ? (
-              <Text style={[m.muted, { fontSize: 11, marginTop: 4 }]}>
-                {[message.costMicro != null ? `$${fromMicro(message.costMicro).toFixed(4)}` : "", message.note ?? ""]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </Text>
-            ) : null}
+          <View key={message.id} style={[s.bubble, message.from === "user" ? s.mine : s.theirs]}>
+            {message.attachments?.map((a, i) =>
+              a.kind === "image" && a.uri ? (
+                <Image key={i} source={{ uri: a.uri }} style={s.image} resizeMode="cover" />
+              ) : (
+                <View key={i} style={s.fileRow}>
+                  <Icon name="file" size={16} color={colors.muted} />
+                  <Text numberOfLines={1} style={s.fileName}>
+                    {a.name}
+                  </Text>
+                </View>
+              ),
+            )}
+            {message.text ? <Text style={s.body}>{message.text}</Text> : null}
           </View>
         ))}
         {identity === "failed" ? (
@@ -406,170 +405,74 @@ export function AgentScreen({
             onPress={() => setAttempt((n) => n + 1)}
             style={({ pressed }) => [s.bubble, s.theirs, { opacity: pressed ? 0.6 : 1 }]}
           >
-            <Text style={[m.text, { lineHeight: 21 }]}>Tap to unlock your agent.</Text>
+            <Text style={s.body}>Tap to unlock your agent.</Text>
           </Pressable>
         ) : null}
         {typing ? (
           <View style={[s.bubble, s.theirs]}>
-            <Text style={[m.muted, { lineHeight: 21 }]}>…</Text>
-          </View>
-        ) : null}
-        {fresh ? (
-          <View style={{ gap: 0, marginTop: 4 }}>
-            {SUGGESTIONS.map((text) => (
-              <Pressable
-                key={text}
-                accessibilityRole="button"
-                onPress={() => void send(text)}
-                style={({ pressed }) => [s.suggestion, { opacity: pressed ? 0.6 : 1 }]}
-              >
-                <Text style={[m.muted, { fontSize: 13, lineHeight: 18 }]}>{text}</Text>
-              </Pressable>
-            ))}
+            <Text style={[s.body, { color: colors.muted }]}>…</Text>
           </View>
         ) : null}
       </ScrollView>
-      <View style={s.composer}>
-        <TextInput
-          accessibilityLabel="Message the agent"
-          // No autofill strip over the composer; see Field in market-ui.
-          autoComplete="off"
-          importantForAutofill="no"
-          placeholder="Message your agent"
-          placeholderTextColor={colors.muted}
-          selectionColor={colors.focus}
-          cursorColor={colors.focus}
-          value={draft}
-          onChangeText={setDraft}
-          onSubmitEditing={() => void send(draft)}
-          returnKeyType="send"
-          maxLength={500}
-          style={s.input}
-        />
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Send message"
-          disabled={!draft.trim() || typing}
-          onPress={() => void send(draft)}
-          style={({ pressed }) => [
-            s.send,
-            { opacity: !draft.trim() || typing ? 0.35 : pressed ? 0.7 : 1 },
-          ]}
-        >
-          <Icon name="send" size={18} color={colors.canvas} />
-        </Pressable>
-      </View>
-      {/* Money between the wallet and the agent, either way. */}
-      <OmenSheet
-        visible={transfer}
-        onClose={() => !working && setTransfer(false)}
-        title={direction === "fund" ? (funded ? "Add funds" : "Fund agent") : "Withdraw funds"}
-      >
-        <View style={{ gap: 16, paddingTop: 4, paddingHorizontal: 24, paddingBottom: 8 }}>
-          <Text style={m.muted}>
-            {direction === "fund"
-              ? `USDC funds your agent. ${channel.limits.minUsdc} to ${channel.limits.maxUsdc} USDC at a time; withdraw whenever you like.`
-              : "Returns your agent's unused USDC to your wallet."}
-          </Text>
-          {direction === "withdraw" && !funded && idle > 0.005 ? (
-            <Button
-              title={moving ? "Moving…" : `Move ${usd(idle)} to wallet`}
-              disabled={working}
-              onPress={() => void moveIdle()}
-            />
-          ) : null}
-          <View style={s.toggle}>
-            {(["fund", "withdraw"] as const).map((d) => (
-              <Pressable
-                key={d}
-                accessibilityRole="button"
-                accessibilityState={{ selected: direction === d }}
-                disabled={d === "withdraw" && !funded && idle <= 0.005}
-                onPress={() => {
-                  setDirection(d);
-                  setAmount("");
-                }}
-                style={[s.toggleItem, direction === d && s.toggleOn, d === "withdraw" && !funded && idle <= 0.005 && { opacity: 0.4 }]}
-              >
-                <Text
-                  style={[
-                    m.text,
-                    {
-                      fontSize: 14,
-                      fontFamily: fonts.medium,
-                      color: direction === d ? colors.ice : colors.muted,
-                    },
-                  ]}
-                >
-                  {d === "fund" ? "Fund" : "Withdraw"}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-          <View style={s.route}>
-            <View style={{ flex: 1, gap: 2 }}>
-              <Text style={m.label}>{direction === "fund" ? "From wallet" : "From agent"}</Text>
-              <Text style={s.routeFigure}>
-                {hidden ? "••••" : usd(direction === "fund" ? cashUsd : balance)}
-              </Text>
-            </View>
-            <Icon name="arrow" size={18} color={colors.muted} />
-            <View style={{ flex: 1, gap: 2, alignItems: "flex-end" }}>
-              <Text style={m.label}>{direction === "fund" ? "To agent" : "To wallet"}</Text>
-              <Text style={s.routeFigure}>
-                {hidden ? "••••" : usd(direction === "fund" ? balance : cashUsd)}
-              </Text>
-            </View>
-          </View>
-          {direction === "fund" ? (
-            <View style={s.amountRow}>
-              <Text style={s.amountSign}>$</Text>
-              <TextInput
-                accessibilityLabel="Amount in dollars"
-                autoComplete="off"
-                importantForAutofill="no"
-                placeholder={String(Math.min(channel.limits.suggestedUsdc, Math.floor(available)) || channel.limits.minUsdc)}
-                placeholderTextColor={colors.muted}
-                selectionColor={colors.focus}
-                cursorColor={colors.focus}
-                keyboardType="decimal-pad"
-                value={amount}
-                onChangeText={(v) => setAmount(v.replace(/[^0-9.]/g, "").slice(0, 10))}
-                style={s.amountInput}
-              />
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Use everything available"
-                onPress={() =>
-                  setAmount(available > 0 ? String(Math.floor(available * 100) / 100) : "")
-                }
-                hitSlop={8}
-              >
-                <Text style={[m.link, { color: colors.ice }]}>Max</Text>
-              </Pressable>
-            </View>
-          ) : null}
-          <Button
-            title={
-              working
-                ? direction === "fund"
-                  ? "Funding…"
-                  : "Withdrawing…"
-                : direction === "fund"
-                  ? over
-                    ? roomUsdc < cashUsd
-                      ? `Up to ${usd(roomUsdc)} more`
-                      : "Not enough USDC"
-                    : under
-                      ? `At least ${channel.limits.minUsdc} USDC`
-                      : funded
-                        ? "Add funds"
-                        : "Fund agent"
-                  : "Withdraw funds"
-            }
-            disabled={working || (direction === "fund" ? !value || over || under : !funded)}
-            onPress={() => void submit()}
-          />
+
+      <AgentComposer
+        draft={draft}
+        onChangeDraft={setDraft}
+        onSend={() => void send(draft)}
+        busy={typing}
+        attachments={pending}
+        onRemoveAttachment={(i) => setPending((all) => all.filter((_a, j) => j !== i))}
+        onAttach={() => setAttachSheet(true)}
+        listening={voice.listening}
+        onToggleVoice={toggleVoice}
+      />
+
+      <AgentDrawer
+        visible={drawer}
+        onClose={() => setDrawer(false)}
+        balanceUsd={balance}
+        hidden={hidden}
+        onFund={() => {
+          setDrawer(false);
+          setFundSheet(true);
+          void channel.loadLimits();
+        }}
+        conversations={conversations}
+        currentId={conversationId}
+        onSelect={(id) => void openConversation(id)}
+        onNew={startNew}
+      />
+
+      <AgentFundSheet
+        visible={fundSheet}
+        onClose={() => setFundSheet(false)}
+        balanceUsd={balance}
+        cashUsd={cashUsd}
+        maxUsd={Math.max(0, Math.min(cashUsd + idle, channel.limits.maxUsdc - (funded ? channel.view?.depositUsdc ?? 0 : 0)))}
+        minUsd={funded ? 0.01 : channel.limits.minUsdc}
+        busy={busy}
+        onFund={(v) => void fund(v)}
+        onWithdraw={() => void withdraw()}
+      />
+
+      <OmenSheet visible={attachSheet} onClose={() => setAttachSheet(false)} title="Attach">
+        <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
+          {(
+            [
+              { label: "Photo", icon: "image", pick: pickImage },
+              { label: "File", icon: "file", pick: pickFile },
+            ] as const
+          ).map((option) => (
+            <Pressable
+              key={option.label}
+              accessibilityRole="button"
+              onPress={() => void attach(option.pick)}
+              style={({ pressed }) => [s.attachRow, { opacity: pressed ? 0.6 : 1 }]}
+            >
+              <Icon name={option.icon} size={20} color={colors.ice} />
+              <Text style={s.attachText}>{option.label}</Text>
+            </Pressable>
+          ))}
         </View>
       </OmenSheet>
     </View>
@@ -578,85 +481,22 @@ export function AgentScreen({
 
 const s = StyleSheet.create({
   header: {
-    paddingHorizontal: space.edge,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: space.edge - 8,
     paddingTop: space.sm,
-    paddingBottom: 12,
-    alignItems: "center",
+    paddingBottom: 4,
   },
-  balance: {
-    fontFamily: fonts.numericBold,
-    fontSize: 24,
-    lineHeight: 30,
-    letterSpacing: -0.5,
-    color: colors.ice,
-    fontVariant: ["tabular-nums"],
-  },
-  // A plain word, no disc behind it.
-  fund: { minHeight: 44, minWidth: 44, alignItems: "flex-end", justifyContent: "center" },
-  toggle: {
-    flexDirection: "row",
-    padding: 4,
-    borderRadius: 14,
-    backgroundColor: colors.surface,
-  },
-  toggleItem: {
-    flex: 1,
-    minHeight: 36,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  toggleOn: { backgroundColor: colors.surfaceRaised },
-  route: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    padding: 14,
-    borderRadius: 16,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.cardLine,
-  },
-  routeFigure: {
-    fontFamily: fonts.numericMedium,
-    fontSize: 16,
-    lineHeight: 22,
-    color: colors.ice,
-    fontVariant: ["tabular-nums"],
-  },
-  amountRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    minHeight: 56,
-    paddingHorizontal: 16,
-    borderRadius: 16,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.line,
-  },
-  amountSign: { fontFamily: fonts.numericBold, fontSize: 22, color: colors.muted },
-  amountInput: {
-    flex: 1,
-    minHeight: 54,
-    paddingVertical: 0,
-    fontFamily: fonts.numericBold,
-    fontSize: 22,
-    color: colors.ice,
-  },
+  headerTitle: { flex: 1, textAlign: "center", fontFamily: chatFonts.medium, fontSize: 15, color: colors.muted },
   thread: {
     flexGrow: 1,
     justifyContent: "flex-end",
     paddingHorizontal: space.edge,
     paddingVertical: 12,
-    gap: 8,
+    gap: 10,
   },
-  bubble: {
-    maxWidth: "84%",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 18,
-  },
+  bubble: { maxWidth: "86%", paddingHorizontal: 15, paddingVertical: 11, borderRadius: 20, gap: 8 },
   theirs: {
     alignSelf: "flex-start",
     backgroundColor: colors.card,
@@ -664,45 +504,13 @@ const s = StyleSheet.create({
     borderColor: colors.cardLine,
     borderBottomLeftRadius: 6,
   },
-  mine: {
-    alignSelf: "flex-end",
-    backgroundColor: colors.surfaceRaised,
-    borderBottomRightRadius: 6,
-  },
-  // Quiet prompts: small text, no outline; the tap area stays generous.
-  suggestion: {
-    alignSelf: "flex-start",
-    minHeight: 32,
-    justifyContent: "center",
-    paddingHorizontal: 4,
-  },
-  composer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    paddingHorizontal: space.edge,
-    paddingTop: 8,
-    paddingBottom: 4,
-  },
-  input: {
-    flex: 1,
-    minHeight: 46,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 23,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.line,
-    color: colors.ice,
-    fontFamily: fonts.regular,
-    fontSize: 15,
-  },
-  send: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: colors.ice,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  mine: { alignSelf: "flex-end", backgroundColor: colors.surfaceRaised, borderBottomRightRadius: 6 },
+  body: { fontFamily: chatFonts.regular, fontSize: 16, lineHeight: 24, color: colors.ice },
+  image: { width: 200, height: 150, borderRadius: 12 },
+  fileRow: { flexDirection: "row", alignItems: "center", gap: 6, maxWidth: 220 },
+  fileName: { flexShrink: 1, fontFamily: chatFonts.regular, fontSize: 14, color: colors.ice },
+  suggestion: { alignSelf: "flex-start", minHeight: 36, justifyContent: "center", paddingHorizontal: 4 },
+  suggestionText: { fontFamily: chatFonts.regular, fontSize: 14, lineHeight: 20, color: colors.muted },
+  attachRow: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 52, paddingHorizontal: 8 },
+  attachText: { fontFamily: fonts.medium, fontSize: 16, color: colors.ice },
 });

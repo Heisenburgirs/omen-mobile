@@ -69,6 +69,16 @@ const config: ExpoConfig = {
       },
     ],
     ["expo-build-properties", { android: { usesCleartextTraffic: development } }],
+    [
+      "expo-speech-recognition",
+      {
+        microphonePermission: "OMEN listens only while you hold the mic to talk to your agent.",
+        speechRecognitionPermission: "OMEN turns what you say into a message for your agent.",
+        androidSpeechServicePackages: ["com.google.android.googlequicksearchbox", "com.google.android.as"],
+      },
+    ],
+    ["expo-image-picker", { photosPermission: "OMEN attaches the photos you pick to your agent conversation.", cameraPermission: false, microphonePermission: false }],
+    "expo-document-picker",
     "./plugins/with-release-signing.js",
   ],
 };

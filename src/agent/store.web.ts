@@ -1,28 +1,40 @@
 import { open, seal } from "./identity";
-import type { StoredMessage } from "./store";
-export type { StoredMessage } from "./store";
+import type { Attachment, Conversation, StoredMessage } from "./store";
+export type { Attachment, Conversation, StoredMessage } from "./store";
 
 // The browser stand-in for the agent's SQLite file: one JSON document in
-// localStorage, every value and message sealed under the user's key just as
-// on the phone (see identity.ts). A private window or blocked site data
-// makes every call degrade to "nothing stored", like the rest of the web
-// app's storage.
-type Document = {
-  kv: Record<string, string>;
-  messages: { id: number; owner: string; role: StoredMessage["role"]; text: string; costMicro: number | null; createdAt: number }[];
-  nextId: number;
+// localStorage, every value, title and message sealed under the user's key
+// just as on the phone (see identity.ts). A private window or blocked site
+// data makes every call degrade to "nothing stored", like the rest of the
+// web app's storage.
+type StoredRow = {
+  id: number;
+  owner: string;
+  conversation?: string;
+  role: StoredMessage["role"];
+  text: string;
+  costMicro: number | null;
+  createdAt: number;
+  meta?: string;
 };
+type StoredConversation = { id: string; owner: string; title: string; createdAt: number; updatedAt: number };
+type Document = { kv: Record<string, string>; messages: StoredRow[]; conversations?: StoredConversation[]; nextId: number };
 const KEY = "omen-agent.v1";
-const MAX_MESSAGES = 400;
+const MAX_MESSAGES = 600;
+const LEGACY = "legacy";
 
 function read(): Document {
   try {
     const raw = window.localStorage.getItem(KEY);
-    if (raw) return JSON.parse(raw) as Document;
+    if (raw) {
+      const doc = JSON.parse(raw) as Document;
+      doc.conversations ??= [];
+      return doc;
+    }
   } catch {
     // Fall through to an empty document.
   }
-  return { kv: {}, messages: [], nextId: 1 };
+  return { kv: {}, messages: [], conversations: [], nextId: 1 };
 }
 function write(doc: Document): void {
   try {
@@ -47,46 +59,115 @@ export async function kvDelete(key: string): Promise<void> {
   delete doc.kv[key];
   write(doc);
 }
-async function opened(owner: string, limit: number): Promise<StoredMessage[]> {
+
+export function newConversationId(): string {
+  const bytes = globalThis.crypto.getRandomValues(new Uint8Array(6));
+  return `c_${Date.now().toString(36)}_${Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")}`;
+}
+
+async function adoptLegacy(owner: string): Promise<void> {
+  const doc = read();
+  const orphans = doc.messages.filter((m) => m.owner === owner && !m.conversation);
+  if (!orphans.length) return;
+  if (!doc.conversations!.some((c) => c.id === LEGACY && c.owner === owner)) {
+    doc.conversations!.push({
+      id: LEGACY,
+      owner,
+      title: await seal("Earlier chat"),
+      createdAt: orphans[0].createdAt,
+      updatedAt: orphans[orphans.length - 1].createdAt,
+    });
+  }
+  for (const m of orphans) m.conversation = LEGACY;
+  write(doc);
+}
+
+export async function createConversation(owner: string, title: string, id = newConversationId()): Promise<Conversation> {
+  const now = Date.now();
+  const clean = title.replace(/\s+/g, " ").trim().slice(0, 80) || "New conversation";
+  const sealed = await seal(clean);
+  const doc = read();
+  doc.conversations!.push({ id, owner, title: sealed, createdAt: now, updatedAt: now });
+  write(doc);
+  return { id, title: clean, createdAt: now, updatedAt: now };
+}
+export async function listConversations(owner: string, limit = 60): Promise<Conversation[]> {
+  await adoptLegacy(owner);
   const rows = read()
-    .messages.filter((m) => m.owner === owner)
-    .slice(-limit);
-  const out: StoredMessage[] = [];
-  for (const { owner: _owner, ...m } of rows) {
+    .conversations!.filter((c) => c.owner === owner)
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .slice(0, limit);
+  const out: Conversation[] = [];
+  for (const r of rows) {
     try {
-      out.push({ ...m, text: await open(m.text) });
+      out.push({ id: r.id, title: await open(r.title), createdAt: r.createdAt, updatedAt: r.updatedAt });
+    } catch {
+      // Sealed under another key.
+    }
+  }
+  return out;
+}
+export async function touchConversation(id: string): Promise<void> {
+  const doc = read();
+  const c = doc.conversations!.find((x) => x.id === id);
+  if (c) c.updatedAt = Date.now();
+  write(doc);
+}
+export async function deleteConversation(owner: string, id: string): Promise<void> {
+  const doc = read();
+  doc.messages = doc.messages.filter((m) => !(m.owner === owner && m.conversation === id));
+  doc.conversations = doc.conversations!.filter((c) => !(c.owner === owner && c.id === id));
+  write(doc);
+}
+
+async function opened(rows: StoredRow[]): Promise<StoredMessage[]> {
+  const out: StoredMessage[] = [];
+  for (const m of rows) {
+    try {
+      let attachments: Attachment[] | undefined;
+      if (m.meta) attachments = (JSON.parse(await open(m.meta)) as { attachments?: Attachment[] }).attachments;
+      out.push({
+        id: m.id,
+        conversation: m.conversation ?? LEGACY,
+        role: m.role,
+        text: await open(m.text),
+        costMicro: m.costMicro,
+        createdAt: m.createdAt,
+        ...(attachments?.length ? { attachments } : {}),
+      });
     } catch {
       // Sealed under another key; left unread.
     }
   }
   return out;
 }
-export const listMessages = (owner: string, limit = 60) => opened(owner, limit);
+export async function listMessages(owner: string, conversation: string, limit = 80): Promise<StoredMessage[]> {
+  return opened(read().messages.filter((m) => m.owner === owner && m.conversation === conversation).slice(-limit));
+}
 export async function addMessage(
   owner: string,
+  conversation: string,
   role: StoredMessage["role"],
   text: string,
   costMicro: number | null = null,
+  attachments?: Attachment[],
 ): Promise<StoredMessage> {
   const sealed = await seal(text);
+  const meta = attachments?.length ? await seal(JSON.stringify({ attachments })) : undefined;
   const doc = read();
-  const message = { id: doc.nextId++, role, text, costMicro, createdAt: Date.now() };
-  doc.messages.push({ ...message, owner, text: sealed });
+  const createdAt = Date.now();
+  const id = doc.nextId++;
+  doc.messages.push({ id, owner, conversation, role, text: sealed, costMicro, createdAt, ...(meta ? { meta } : {}) });
   if (doc.messages.length > MAX_MESSAGES) doc.messages.splice(0, doc.messages.length - MAX_MESSAGES);
   write(doc);
-  return message;
+  return { id, conversation, role, text, costMicro, createdAt, ...(attachments?.length ? { attachments } : {}) };
 }
 export async function searchMessages(owner: string, query: string, limit = 8): Promise<StoredMessage[]> {
   const words = query.toLowerCase().split(/\s+/).filter((w) => w.length > 2).slice(0, 6);
   if (!words.length) return [];
-  const all = await opened(owner, MAX_MESSAGES);
+  const all = await opened(read().messages.filter((m) => m.owner === owner).slice(-400));
   return all
     .filter((m) => words.every((w) => m.text.toLowerCase().includes(w)))
-    .slice(-limit)
-    .reverse();
-}
-export async function clearMessages(owner: string): Promise<void> {
-  const doc = read();
-  doc.messages = doc.messages.filter((m) => m.owner !== owner);
-  write(doc);
+    .reverse()
+    .slice(0, limit);
 }

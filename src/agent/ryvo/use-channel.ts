@@ -52,7 +52,8 @@ const NONE: ChannelView = { state: "none", availableUsdc: 0, depositUsdc: 0, spe
 
 const toView = (s: ChannelStatus): ChannelView => ({
   state: s.state,
-  availableUsdc: fromMicro(s.available),
+  // A closed channel has nothing left to spend, whatever its last figures say.
+  availableUsdc: s.state === "open" ? fromMicro(s.available) : 0,
   depositUsdc: fromMicro(s.deposit),
   spentUsdc: fromMicro(s.accruedSpend),
   closeDeadline: s.closeDeadline,
