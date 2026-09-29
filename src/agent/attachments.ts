@@ -28,7 +28,7 @@ const PICKABLE = [
 ];
 const TEXT_TYPES = /^(text\/|application\/(json|xml|csv|x-yaml|yaml|javascript|x-ndjson))/;
 const TEXT_EXTENSIONS = /\.(txt|md|markdown|csv|tsv|json|ndjson|xml|yaml|yml|log|html?|toml|ini)$/i;
-const MAX_PDF_BYTES = 4 * 1024 * 1024;
+const MAX_PDF_BYTES = 3 * 1024 * 1024;
 /** How much of a document the agent reads; the rest is left out and said so. */
 export const MAX_TEXT = 12000;
 
@@ -36,20 +36,25 @@ export const MAX_TEXT = 12000;
 export class AttachmentError extends Error {}
 
 async function readPdf(asset: DocumentPicker.DocumentPickerAsset, token: string | null): Promise<string> {
-  if (asset.size && asset.size > MAX_PDF_BYTES) throw new AttachmentError("That PDF is larger than 4 MB.");
-  const form = new FormData();
+  if (asset.size && asset.size > MAX_PDF_BYTES) throw new AttachmentError("That PDF is larger than 3 MB.");
+  const auth: Record<string, string> = token ? { authorization: `Bearer ${token}` } : {};
   const webFile = (asset as { file?: Blob }).file;
-  if (Platform.OS === "web" && webFile) form.append("file", webFile, asset.name);
-  // React Native's FormData uploads a file from its URI.
-  else form.append("file", { uri: asset.uri, name: asset.name, type: "application/pdf" } as unknown as Blob);
-  const response = await fetch(`${config.apiUrl}/api/agent/document`, {
-    method: "POST",
-    headers: token ? { authorization: `Bearer ${token}` } : {},
-    body: form,
-  });
-  const body = (await response.json().catch(() => ({}))) as { text?: string; error?: string };
-  if (!response.ok || typeof body.text !== "string") throw new AttachmentError(body.error || "That PDF could not be read.");
-  return body.text;
+  let body: BodyInit;
+  let headers = auth;
+  if (Platform.OS === "web" && webFile) {
+    const form = new FormData();
+    form.append("file", webFile, asset.name);
+    body = form;
+  } else {
+    // The app's fetch cannot upload a file from its URI, so the phone reads
+    // it and sends base64 in JSON.
+    body = JSON.stringify({ name: asset.name, base64: await new File(asset.uri).base64() });
+    headers = { ...auth, "content-type": "application/json" };
+  }
+  const response = await fetch(`${config.apiUrl}/api/agent/document`, { method: "POST", headers, body });
+  const read = (await response.json().catch(() => ({}))) as { text?: string; error?: string };
+  if (!response.ok || typeof read.text !== "string") throw new AttachmentError(read.error || "That PDF could not be read.");
+  return read.text;
 }
 
 /**

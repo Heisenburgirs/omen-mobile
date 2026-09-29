@@ -298,6 +298,7 @@ export function AgentScreen({
       const picked = await pickDocument(async () => (user ? await getAccessToken() : null));
       if (picked) setPending((all) => [...all, picked].slice(0, 4));
     } catch (e) {
+      if (!(e instanceof AttachmentError)) console.warn("attach failed", e);
       showToast(e instanceof AttachmentError ? e.message : "Couldn't attach that. Try again.");
     }
   };
