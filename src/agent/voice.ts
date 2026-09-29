@@ -30,13 +30,10 @@ export function useVoiceInput(onTranscript: (text: string, final: boolean) => vo
       return;
     }
     try {
-      // The first tap asks for the microphone. Once the user has said no for
-      // good, Android stops showing the prompt, so the tap opens OMEN's
-      // settings where it can be turned on.
-      let permission = await ExpoSpeechRecognitionModule.getPermissionsAsync();
-      if (!permission.granted && permission.canAskAgain !== false) {
-        permission = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
-      }
+      // Asking shows Android's microphone prompt. Once the user has said no
+      // for good, Android answers without showing it, so the tap opens
+      // OMEN's settings where it can be turned on.
+      const permission = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
       if (!permission.granted) {
         if (Platform.OS !== "web" && permission.canAskAgain === false) {
           showToast("Turn on the microphone for OMEN in Settings.");
