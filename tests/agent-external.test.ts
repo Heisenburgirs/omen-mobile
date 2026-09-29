@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { postCount, sinceMinutes, solanaRefs, wantsTop, webQuery, xHandles, xPostId, xSearchQuery } from "../src/agent/extract";
 import { guessIntent } from "../src/agent/intent";
-import { isSmallTalk, keywordPlan, planQuestions } from "../src/agent/planner";
+import { isSmallTalk, keywordPlan, planFromAnswers, planQuestions } from "../src/agent/planner";
 import { TOOLS, toolById, type ToolContext } from "../src/agent/registry";
 
 test("X handles, post links, windows and counts come out of the words", () => {
@@ -49,6 +49,37 @@ test("Jev is asked about every tool within the route's question limit", () => {
   for (const id of ["x_posts", "x_profile", "x_mentions", "x_search", "x_replies", "web_search", "web_research", "chain_lookup"]) {
     assert.ok(questions[`use_${id}`], id);
   }
+});
+
+test("one source: an account's posts do not pull in X search and a web search too", () => {
+  const b = (probability: number) => ({ type: "boolean" as const, probability });
+  const plan = planFromAnswers({
+    tier: { type: "choice", choice: "lookup" },
+    source: { type: "choice", choice: "x_account" },
+    use_x_posts: b(0.95),
+    use_x_search: b(0.8),
+    use_web_search: b(0.7),
+    use_balance: b(0.1),
+  });
+  assert.deepEqual(plan.tools, ["x_posts"]);
+  // Outside the source, only near certainty adds a paid lookup, and never more than two in all.
+  const wide = planFromAnswers({
+    tier: { type: "choice", choice: "explain" },
+    source: { type: "choice", choice: "x_topic" },
+    use_x_search: b(0.95),
+    use_web_search: b(0.93),
+    use_x_profile: b(0.92),
+    use_asset: b(0.8),
+  });
+  assert.deepEqual(wide.tools, ["x_search", "web_search", "asset"]);
+  // A source whose tools Jev was unsure of still gets its likeliest one.
+  const unsure = planFromAnswers({
+    tier: { type: "choice", choice: "lookup" },
+    source: { type: "choice", choice: "chain" },
+    use_chain_lookup: b(0.5),
+    use_web_search: b(0.55),
+  });
+  assert.deepEqual(unsure.tools, ["chain_lookup"]);
 });
 
 function context(text: string, calls: Array<{ tool: string; input: Record<string, unknown> }>, funded = true): ToolContext {

@@ -6,7 +6,7 @@ import { periodOf, tradeArgsOf, TOOLS } from "../src/agent/registry";
 
 test("Jev gets one question per tool plus the kind of answer, within the site's cap", () => {
   const q = planQuestions();
-  assert.equal(Object.keys(q).length, TOOLS.length + 1);
+  assert.equal(Object.keys(q).length, TOOLS.length + 2);
   assert.ok(Object.keys(q).length <= 32);
   assert.equal(q.tier.type, "choice");
   assert.equal(q.use_balance.type, "boolean");
