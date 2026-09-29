@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Image, Keyboard, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Icon, IconButton, m } from "../components/market-ui";
-import { OmenSheet } from "../components/omen-sheet";
 import { AgentDrawer } from "../components/agent-drawer";
 import { AgentComposer } from "../components/agent-composer";
 import { AgentFundPanel } from "../components/agent-fund-panel";
@@ -26,7 +25,7 @@ import {
   type Conversation,
   type StoredMessage,
 } from "../agent/store";
-import { pickFile, pickImage, storedAttachment, type PendingAttachment } from "../agent/attachments";
+import { AttachmentError, pickDocument, storedAttachment, type PendingAttachment } from "../agent/attachments";
 import { useVoiceInput } from "../agent/voice";
 import { isUnlocked, lockIdentity, unlockIdentity } from "../agent/identity";
 import { useLatest } from "../agent/use-latest";
@@ -169,7 +168,6 @@ export function AgentScreen({
   const [drawer, setDrawer] = useState(false);
   // The side menu shows either the conversations or, after Fund, the fund view.
   const [fundView, setFundView] = useState(false);
-  const [attachSheet, setAttachSheet] = useState(false);
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState<PendingAttachment[]>([]);
   const [typing, setTyping] = useState(false);
@@ -295,13 +293,12 @@ export function AgentScreen({
     }
   };
 
-  const attach = async (pick: () => Promise<PendingAttachment | null>) => {
-    setAttachSheet(false);
+  const attach = async () => {
     try {
-      const picked = await pick();
+      const picked = await pickDocument(async () => (user ? await getAccessToken() : null));
       if (picked) setPending((all) => [...all, picked].slice(0, 4));
-    } catch {
-      showToast("Couldn't attach that. Try again.");
+    } catch (e) {
+      showToast(e instanceof AttachmentError ? e.message : "Couldn't attach that. Try again.");
     }
   };
 
@@ -481,7 +478,7 @@ export function AgentScreen({
         busy={typing}
         attachments={pending}
         onRemoveAttachment={(i) => setPending((all) => all.filter((_a, j) => j !== i))}
-        onAttach={() => setAttachSheet(true)}
+        onAttach={() => void attach()}
         listening={voice.listening}
         onToggleVoice={toggleVoice}
       />
@@ -530,26 +527,6 @@ export function AgentScreen({
         }
       />
 
-      <OmenSheet visible={attachSheet} onClose={() => setAttachSheet(false)} title="Attach">
-        <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
-          {(
-            [
-              { label: "Photo", icon: "image", pick: pickImage },
-              { label: "File", icon: "file", pick: pickFile },
-            ] as const
-          ).map((option) => (
-            <Pressable
-              key={option.label}
-              accessibilityRole="button"
-              onPress={() => void attach(option.pick)}
-              style={({ pressed }) => [s.attachRow, { opacity: pressed ? 0.6 : 1 }]}
-            >
-              <Icon name={option.icon} size={20} color={colors.ice} />
-              <Text style={s.attachText}>{option.label}</Text>
-            </Pressable>
-          ))}
-        </View>
-      </OmenSheet>
     </View>
   );
 }
@@ -586,6 +563,4 @@ const s = StyleSheet.create({
   fileName: { flexShrink: 1, fontFamily: chatFonts.regular, fontSize: 14, color: colors.ice },
   suggestion: { alignSelf: "flex-start", minHeight: 36, justifyContent: "center", paddingHorizontal: 4 },
   suggestionText: { fontFamily: chatFonts.regular, fontSize: 14, lineHeight: 20, color: colors.muted },
-  attachRow: { flexDirection: "row", alignItems: "center", gap: 12, minHeight: 52, paddingHorizontal: 8 },
-  attachText: { fontFamily: fonts.medium, fontSize: 16, color: colors.ice },
 });

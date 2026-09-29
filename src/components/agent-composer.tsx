@@ -72,7 +72,7 @@ export function AgentComposer({
         <View style={s.tools}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Attach a photo or file"
+            accessibilityLabel="Attach a document"
             onPress={onAttach}
             hitSlop={6}
             style={({ pressed }) => [s.tool, { opacity: pressed ? 0.6 : 1 }]}

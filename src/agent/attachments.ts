@@ -1,109 +1,91 @@
 import { Platform } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
-import * as ImagePicker from "expo-image-picker";
 import { File } from "expo-file-system";
-import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
+import { config } from "../config";
 import type { Attachment } from "./store";
 
-// Photos and files the user attaches to a message. Text documents are read
-// on the device and handed to the agent as data. A photo is shrunk to at
-// most 1280 px on its long side as a JPEG and sent inline with the message,
-// which is what Ryvo can price before the reply (and keeps the request
-// small); other files are shown in the conversation and the agent is told
-// they are there.
+// Documents the user attaches to a message: PDFs, spreadsheets saved as CSV,
+// and text files. A text file is read on the device; a PDF is sent to the
+// site, which reads its text and keeps nothing. Either way the agent gets
+// the text as data, never the file. Photos are not offered for now.
 export type PendingAttachment = Attachment & {
   text?: string;
-  /** The photo as the model sees it: a JPEG data: URL. Not stored with the message. */
+  /** Set by older builds for photos; nothing attaches one now. */
   dataUrl?: string;
 };
 
-const MAX_IMAGE_SIDE = 1280;
-
-/** A photo as a JPEG data: URL no larger than MAX_IMAGE_SIDE on its long side. */
-export async function imageForModel(uri: string, width?: number, height?: number): Promise<string> {
-  let w = width;
-  let h = height;
-  if (!w || !h) {
-    const probe = await ImageManipulator.manipulate(uri).renderAsync();
-    w = probe.width;
-    h = probe.height;
-  }
-  const context = ImageManipulator.manipulate(uri);
-  if (Math.max(w, h) > MAX_IMAGE_SIDE) context.resize(w >= h ? { width: MAX_IMAGE_SIDE } : { height: MAX_IMAGE_SIDE });
-  const image = await context.renderAsync();
-  const saved = await image.saveAsync({ format: SaveFormat.JPEG, compress: 0.7, base64: true });
-  if (!saved.base64) throw new Error("The photo could not be prepared.");
-  return `data:image/jpeg;base64,${saved.base64}`;
-}
-
-async function withModelImage(attachment: PendingAttachment, width?: number, height?: number): Promise<PendingAttachment> {
-  if (!attachment.uri) return attachment;
-  try {
-    return { ...attachment, dataUrl: await imageForModel(attachment.uri, width, height) };
-  } catch {
-    return attachment;
-  }
-}
-
+/** What the picker offers. Android reports CSV under several types. */
+const PICKABLE = [
+  "application/pdf",
+  "text/*",
+  "text/csv",
+  "text/comma-separated-values",
+  "application/csv",
+  "application/vnd.ms-excel",
+  "application/json",
+  "application/xml",
+  "application/x-yaml",
+];
 const TEXT_TYPES = /^(text\/|application\/(json|xml|csv|x-yaml|yaml|javascript|x-ndjson))/;
-const TEXT_EXTENSIONS = /\.(txt|md|markdown|csv|tsv|json|ndjson|xml|yaml|yml|log|html?|js|ts|py|sol|rs|toml|ini)$/i;
+const TEXT_EXTENSIONS = /\.(txt|md|markdown|csv|tsv|json|ndjson|xml|yaml|yml|log|html?|toml|ini)$/i;
+const MAX_PDF_BYTES = 4 * 1024 * 1024;
 /** How much of a document the agent reads; the rest is left out and said so. */
 export const MAX_TEXT = 12000;
 
-export async function pickImage(): Promise<PendingAttachment | null> {
-  const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.7, allowsMultipleSelection: false });
-  if (result.canceled || !result.assets?.length) return null;
-  const asset = result.assets[0];
-  return withModelImage(
-    {
-      kind: "image",
-      name: asset.fileName || "Photo",
-      uri: asset.uri,
-      ...(asset.mimeType ? { mimeType: asset.mimeType } : {}),
-      ...(asset.fileSize ? { size: asset.fileSize } : {}),
-    },
-    asset.width,
-    asset.height,
-  );
+/** Why a picked file cannot be attached, in words for the user. */
+export class AttachmentError extends Error {}
+
+async function readPdf(asset: DocumentPicker.DocumentPickerAsset, token: string | null): Promise<string> {
+  if (asset.size && asset.size > MAX_PDF_BYTES) throw new AttachmentError("That PDF is larger than 4 MB.");
+  const form = new FormData();
+  const webFile = (asset as { file?: Blob }).file;
+  if (Platform.OS === "web" && webFile) form.append("file", webFile, asset.name);
+  // React Native's FormData uploads a file from its URI.
+  else form.append("file", { uri: asset.uri, name: asset.name, type: "application/pdf" } as unknown as Blob);
+  const response = await fetch(`${config.apiUrl}/api/agent/document`, {
+    method: "POST",
+    headers: token ? { authorization: `Bearer ${token}` } : {},
+    body: form,
+  });
+  const body = (await response.json().catch(() => ({}))) as { text?: string; error?: string };
+  if (!response.ok || typeof body.text !== "string") throw new AttachmentError(body.error || "That PDF could not be read.");
+  return body.text;
 }
 
-export async function pickFile(): Promise<PendingAttachment | null> {
-  const result = await DocumentPicker.getDocumentAsync({ multiple: false, copyToCacheDirectory: true });
+/**
+ * Lets the user pick a document and reads it. A PDF needs the user's token
+ * for the site; a text file does not.
+ */
+export async function pickDocument(token: () => Promise<string | null>): Promise<PendingAttachment | null> {
+  const result = await DocumentPicker.getDocumentAsync({ type: PICKABLE, multiple: false, copyToCacheDirectory: true });
   if (result.canceled || !result.assets?.length) return null;
   const asset = result.assets[0];
   const base: PendingAttachment = {
-    kind: "file",
+    kind: "text",
     name: asset.name,
     uri: asset.uri,
     ...(asset.mimeType ? { mimeType: asset.mimeType } : {}),
     ...(asset.size ? { size: asset.size } : {}),
   };
-  if (asset.mimeType?.startsWith("image/")) return withModelImage({ ...base, kind: "image" });
-  const textual = (asset.mimeType && TEXT_TYPES.test(asset.mimeType)) || TEXT_EXTENSIONS.test(asset.name);
-  if (!textual) return base;
-  try {
-    const text =
-      Platform.OS === "web"
-        ? await (asset as { file?: { text(): Promise<string> } }).file?.text()
-        : await new File(asset.uri).text();
-    return text === undefined ? base : { ...base, kind: "text", text };
-  } catch {
-    return base;
+  if (asset.mimeType === "application/pdf" || /\.pdf$/i.test(asset.name)) {
+    return { ...base, text: await readPdf(asset, await token()) };
   }
+  const textual = (asset.mimeType && TEXT_TYPES.test(asset.mimeType)) || TEXT_EXTENSIONS.test(asset.name);
+  if (!textual) throw new AttachmentError("The agent reads PDF, CSV and text files.");
+  const webFile = (asset as { file?: { text(): Promise<string> } }).file;
+  const text = Platform.OS === "web" ? await webFile?.text() : await new File(asset.uri).text();
+  if (text === undefined) throw new AttachmentError("That file could not be read.");
+  return { ...base, text };
 }
 
 /** What the agent is told about a message's attachments. */
 export function attachmentContext(attachments: readonly PendingAttachment[]): string[] {
   return attachments.map((a) => {
-    if (a.kind === "text" && a.text !== undefined) {
+    if (a.text !== undefined) {
       const cut = a.text.length > MAX_TEXT;
       return `attached document "${a.name}"${cut ? ` (first ${MAX_TEXT} characters of ${a.text.length})` : ""}:\n${a.text.slice(0, MAX_TEXT)}`;
     }
-    if (a.kind === "image")
-      return a.dataUrl
-        ? `attached image "${a.name}": it is included with this message; look at it to answer.`
-        : `attached image "${a.name}": it could not be prepared, so you cannot see it; say so in one sentence.`;
-    return `attached file "${a.name}"${a.mimeType ? ` (${a.mimeType})` : ""}: you cannot read this file type yet.`;
+    return `attached file "${a.name}": you cannot read it; say so in one sentence.`;
   });
 }
 
