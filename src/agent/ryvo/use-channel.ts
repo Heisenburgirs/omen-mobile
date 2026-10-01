@@ -225,6 +225,7 @@ export function useRyvoChannel(payer: ChannelPayer) {
           model: options?.model ?? RYVO.chatModel,
           messages,
           max_tokens: options?.maxTokens ?? RYVO.maxOutputTokens,
+          ...(options?.reasoning ? { reasoning_effort: options.reasoning } : {}),
           temperature: 0.4,
           stream: false,
         }),

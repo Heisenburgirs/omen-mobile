@@ -29,7 +29,8 @@ export { guessIntent, type Intent } from "./intent";
 export type ContentPart = { type: "text"; text: string } | { type: "image_url"; image_url: { url: string } };
 export type ChatMessage = { role: "system" | "user" | "assistant"; content: string | ContentPart[] };
 export type Timing = { label: string; ms: number };
-export type WriteOptions = { model: string; maxTokens: number };
+/** reasoning "none" keeps a model that thinks by default from spending the output budget on hidden reasoning. */
+export type WriteOptions = { model: string; maxTokens: number; reasoning?: "none" };
 export type Writer = (
   messages: ChatMessage[],
   options: WriteOptions,
@@ -199,6 +200,7 @@ export async function runTurn(input: TurnInput): Promise<TurnResult> {
     input.write([{ role: "system", content: system }, ...historyMessages(input.history), { role: "user", content }], {
       model: choice.model,
       maxTokens: choice.maxTokens,
+      ...(choice.reasoning ? { reasoning: choice.reasoning } : {}),
     }),
   );
   if (written.timings) timings.push(...written.timings);

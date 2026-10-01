@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { guessIntent, isAgentBalance } from "../src/agent/intent";
+import { MODELS } from "../src/agent/models";
 import { keywordPlan } from "../src/agent/planner";
 import { toolById, type ToolContext } from "../src/agent/registry";
 
@@ -44,4 +45,10 @@ test("the agent balance tool reads the channel, not the portfolio", async () => 
     ctx(() => ({ state: "none", availableUsdc: 0, depositUsdc: 0, spentUsdc: 0, idleUsdc: 0 })),
   );
   assert.match(unfunded.data, /not funded/);
+});
+
+test("the judge tier turns a model's default reasoning off so the budget goes to the reply", () => {
+  assert.equal(MODELS.judge.reasoning, "none");
+  assert.ok(MODELS.judge.maxTokens >= 1000);
+  assert.equal(MODELS.chat.reasoning, undefined);
 });

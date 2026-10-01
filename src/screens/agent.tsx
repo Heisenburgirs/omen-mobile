@@ -8,6 +8,7 @@ import { AgentFundPanel } from "../components/agent-fund-panel";
 import { usd } from "../domain/market";
 import { USDC } from "../domain/models";
 import { tradingColors as colors, tradingFonts as fonts, chatFonts, space } from "../theme";
+import * as Clipboard from "expo-clipboard";
 import { showToast } from "../lib/toast";
 import { mobileFetch, useMobile } from "../lib/mobile-api";
 import { useEmbeddedSolanaWallet, usePrivy } from "../lib/privy";
@@ -33,6 +34,13 @@ import { useLatest } from "../agent/use-latest";
 import { messageSigner, type WalletProvider } from "../agent/ryvo/wallet-signer";
 import { useAgentWallet } from "../agent/agent-wallet";
 import { useRyvoChannel } from "../agent/ryvo/use-channel";
+
+/** A long press on a bubble copies its text. */
+async function copyMessage(text: string) {
+  if (!text) return;
+  await Clipboard.setStringAsync(text);
+  showToast("Copied");
+}
 
 const GREETING = "What should we trade on?";
 /** The least a single deposit into the agent can be, in dollars. */
@@ -436,7 +444,13 @@ export function AgentScreen({
           </View>
         ) : null}
         {messages.map((message) => (
-          <View key={message.id} style={[s.bubble, message.from === "user" ? s.mine : s.theirs]}>
+          <Pressable
+            key={message.id}
+            accessibilityHint="Hold to copy"
+            delayLongPress={350}
+            onLongPress={() => void copyMessage(message.text)}
+            style={({ pressed }) => [s.bubble, message.from === "user" ? s.mine : s.theirs, pressed && { opacity: 0.7 }]}
+          >
             {message.attachments?.map((a, i) =>
               a.kind === "image" && a.uri ? (
                 <Image key={i} source={{ uri: a.uri }} style={s.image} resizeMode="cover" />
@@ -450,7 +464,7 @@ export function AgentScreen({
               ),
             )}
             {message.text ? <Text style={s.body}>{message.text}</Text> : null}
-          </View>
+          </Pressable>
         ))}
         {identity === "failed" ? (
           <Pressable

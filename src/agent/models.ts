@@ -6,7 +6,7 @@
 // catalogue offers at a sane price. Each tier can be overridden per build.
 export type Tier = "chat" | "lookup" | "explain" | "judge";
 
-export type ModelChoice = { model: string; maxTokens: number; label: string };
+export type ModelChoice = { model: string; maxTokens: number; label: string; reasoning?: "none" };
 
 const env = (name: string) => (process.env[name] || "").trim();
 
@@ -28,8 +28,12 @@ export const MODELS: Record<Tier, ModelChoice> = {
   },
   judge: {
     model: env("EXPO_PUBLIC_AGENT_MODEL_JUDGE") || "anthropic/claude-sonnet-5.5",
-    maxTokens: 900,
+    maxTokens: 1200,
     label: "sonnet-5.5",
+    // Sonnet reasons by default on the gateway and, with a long data block,
+    // spends the whole output budget thinking and returns no text. The
+    // reply is the reasoning here.
+    reasoning: "none",
   },
 };
 
