@@ -145,7 +145,7 @@ export async function marketScan(fetch: Fetcher, text: string): Promise<{ data: 
     `${label} (${rows.length}): ${rows.length ? compact(rows, max) : "none matched"}`;
   return {
     data: [
-      capMax ? `market cap at most ${capMax.toLocaleString("en-US")}, liquidity at least $5,000` : "liquidity at least $5,000",
+      capMax ? `market cap at most $${capMax.toLocaleString("en-US")}, liquidity at least $5,000` : "liquidity at least $5,000",
       section("gainers24h, OMEN index", take(gainers), 3_600),
       section("newest launches, OMEN index", take(newest), 3_600),
       section("busiest by volume, OMEN index", take(volume), 3_600),
