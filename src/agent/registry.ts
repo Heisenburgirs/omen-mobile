@@ -1,5 +1,6 @@
 import {
   compact,
+  curatedListOf,
   dividendSummary,
   dripRules,
   findAssets,
@@ -11,6 +12,8 @@ import {
   type Fetcher,
 } from "./tools";
 import { EXTERNAL_TOOLS, postsForWriter } from "./external-tools";
+import { solanaRefs } from "./extract";
+import type { TokenRow } from "./tools";
 
 // Everything the agent can look up or prepare, as one registry. Jev reads
 // each tool's `describe` line and says whether a message needs it; code
@@ -214,6 +217,30 @@ export const TOOLS: Tool[] = [
     kind: "read",
     source: "omen",
     run: async (ctx) => ({ data: await dripRules(ctx.fetch) }),
+  },
+  {
+    id: "tokens",
+    describe:
+      "any Solana token, beyond OMEN's own index: what is trending on chain, the curated lists (majors, stocks, ETFs, RWAs, metals, stablecoins), or a named token's market stats, issuer and risk score",
+    kind: "read",
+    source: "omen",
+    run: async (ctx) => {
+      const { addresses } = solanaRefs(ctx.text);
+      if (addresses[0]) {
+        const { data } = await ctx.fetch<{ data: unknown }>("tokens", { mint: addresses[0] });
+        return { data: compact(data, 3000), args: { mint: addresses[0] } };
+      }
+      const symbols = mentionedSymbols(ctx.text).slice(0, 3);
+      if (symbols.length) {
+        const found = await Promise.all(
+          symbols.map((s) => ctx.fetch<{ data: TokenRow[] }>("tokens", { q: s, limit: "4" }).then((r) => `${s}: ${compact(r.data, 2200)}`).catch(() => `${s}: unavailable`)),
+        );
+        return { data: found.join("\n"), args: { symbols: symbols.join(",") } };
+      }
+      const list = curatedListOf(ctx.text) ?? "trending";
+      const { data } = await ctx.fetch<{ data: TokenRow[] }>("tokens", { list, limit: "25" });
+      return { data: compact({ list, tokens: data }, 8000), args: { list } };
+    },
   },
   {
     id: "recall",

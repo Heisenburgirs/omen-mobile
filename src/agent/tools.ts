@@ -106,7 +106,11 @@ export async function marketScan(fetch: Fetcher, text: string): Promise<{ data: 
     fetch<Envelope<ScanRow[]>>("assets", { scope: "stonk", type: "tokens", q: "", sort, direction: "desc", filters, cursor: "0", chain: "skip" })
       .then((r) => (Array.isArray(r.data) ? r.data : []))
       .catch(() => [] as ScanRow[]);
-  const [gainers, newest, volume] = await Promise.all([list("gainers"), list("newest"), list("volume")]);
+  // tokens.xyz's trending list reaches the whole chain, not only OMEN's index.
+  const trendingList = fetch<Envelope<TokenRow[]>>("tokens", { list: "trending", limit: "20" })
+    .then((r) => (Array.isArray(r.data) ? r.data : []))
+    .catch(() => [] as TokenRow[]);
+  const [gainers, newest, volume, trending] = await Promise.all([list("gainers"), list("newest"), list("volume"), trendingList]);
   const days = (iso: string | null | undefined) => (iso ? Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 86_400_000)) : null);
   const row = (a: ScanRow) => ({
     symbol: a.symbol,
@@ -122,6 +126,21 @@ export async function marketScan(fetch: Fetcher, text: string): Promise<{ data: 
   });
   const take = (rows: ScanRow[]) => rows.slice(0, 8).map(row);
   const symbols = [...new Set([...gainers, ...newest, ...volume].map((a) => a.symbol).filter((s): s is string => Boolean(s)))];
+  const trendingRows = trending.map((r) => ({
+    symbol: r.symbol,
+    name: r.name,
+    mint: r.mint,
+    category: r.category,
+    price: r.price,
+    change1h: r.change1h ?? null,
+    change24h: r.change24h,
+    volume24h: r.volume24h,
+    volume1h: r.volume1h ?? null,
+    trades24h: r.trades24h ?? null,
+    wallets24h: r.wallets24h ?? null,
+    liquidity: r.liquidity,
+    ...(r.advisory ? { advisory: r.advisory } : {}),
+  }));
   return {
     data: compact(
       {
@@ -129,11 +148,48 @@ export async function marketScan(fetch: Fetcher, text: string): Promise<{ data: 
         gainers24h: take(gainers),
         newest: take(newest),
         busiest: take(volume),
+        trendingOnChain: trendingRows,
       },
-      9_000,
+      11_000,
     ),
     symbols,
   };
+}
+
+/** A row of the token universe (tokens.xyz through the app's API). */
+export type TokenRow = {
+  symbol: string | null;
+  name: string | null;
+  assetId: string | null;
+  mint: string | null;
+  category: string | null;
+  issuer?: string | null;
+  trustTier?: string | null;
+  price: number | null;
+  change1h?: number | null;
+  change24h: number | null;
+  volume24h: number | null;
+  volume1h?: number | null;
+  trades24h?: number | null;
+  wallets24h?: number | null;
+  liquidity: number | null;
+  marketCap?: number | null;
+  fdv?: number | null;
+  advisory?: string | null;
+  risk?: { score: number | null; grade: string | null; label: string | null; trustedLaunch: boolean; caps: string[] } | null;
+};
+
+/** Which curated list a message asks for, if any. */
+export function curatedListOf(text: string): string | null {
+  const t = text.toLowerCase();
+  if (/\b(stocks?|equit(y|ies)|xstocks?)\b/.test(t)) return "stocks";
+  if (/\betfs?\b/.test(t)) return "etfs";
+  if (/\brwas?\b|real[ -]world/.test(t)) return "rwas";
+  if (/\b(metals?|gold|silver)\b/.test(t)) return "metals";
+  if (/\b(majors?|blue[ -]?chips?|large[ -]?caps?)\b/.test(t)) return "majors";
+  if (/\blsts?\b|liquid staking/.test(t)) return "lsts";
+  if (/\b(stable ?coins?|currenc(y|ies))\b/.test(t)) return "currencies";
+  return null;
 }
 
 /** Symbols the user named: $SOL, ZEC, xSOL. */
