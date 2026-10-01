@@ -141,17 +141,16 @@ export async function marketScan(fetch: Fetcher, text: string): Promise<{ data: 
     liquidity: r.liquidity,
     ...(r.advisory ? { advisory: r.advisory } : {}),
   }));
+  const section = (label: string, rows: unknown[], max: number) =>
+    `${label} (${rows.length}): ${rows.length ? compact(rows, max) : "none matched"}`;
   return {
-    data: compact(
-      {
-        ...(capMax ? { marketCapAtMost: capMax } : {}),
-        gainers24h: take(gainers),
-        newest: take(newest),
-        busiest: take(volume),
-        trendingOnChain: trendingRows,
-      },
-      11_000,
-    ),
+    data: [
+      capMax ? `market cap at most ${capMax.toLocaleString("en-US")}, liquidity at least $5,000` : "liquidity at least $5,000",
+      section("gainers24h, OMEN index", take(gainers), 3_600),
+      section("newest launches, OMEN index", take(newest), 3_600),
+      section("busiest by volume, OMEN index", take(volume), 3_600),
+      section("trending across Solana, tokens.xyz", trendingRows, 6_000),
+    ].join("\n"),
     symbols,
   };
 }

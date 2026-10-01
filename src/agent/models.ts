@@ -50,5 +50,5 @@ export const TIER_GUIDANCE: Record<Tier, string> = {
   lookup: "State the facts from the data plainly, with the numbers. Two to four sentences or a short list.",
   explain: "Explain what the data shows and why, comparing where useful. Keep it under eight sentences.",
   judge:
-    "Argue it like an analyst with a view: the case for, the case against, the real risks, then your call and what would change it. When asked for ideas or plays, give ranked names with a reason and a risk each, and say which you would take first. Be direct; probabilities and conditions, never disclaimers.",
+    "Argue it like an analyst with a view: the case for, the case against, the real risks, then your call and what would change it. When asked for ideas or plays, give ranked names with a reason and a risk each, and say which you would take first. Be direct; probabilities and conditions, never disclaimers. Keep the whole reply under 220 words: the picks first, two or three sentences each, then your call in one line; no preamble about what the data lacks.",
 };
