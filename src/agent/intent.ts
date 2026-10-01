@@ -1,5 +1,5 @@
 import { solanaRefs } from "./extract";
-import { mentionedSymbols } from "./tools";
+import { isResearch, mentionedSymbols } from "./tools";
 
 // What a message is about. Kept free of React Native imports so it can be
 // tested in Node; the harness asks Jev with these labels and falls back to
@@ -43,6 +43,7 @@ export function guessIntent(text: string): Intent {
   if (/\b(news|search (?:the )?web|google|look up|what happened|headlines?)\b/.test(t)) return "web";
   if (/\b(drip|reinvest)/.test(t)) return "drip";
   if (/\b(dividend|payout|paid me|yield|pays)/.test(t)) return "dividends";
+  if (isResearch(text)) return "market";
   if (/\b(buy|sell|swap|trade)\b/.test(t)) return "trade";
   if (/\b(portfolio|holdings?|balance|worth|own|pnl|performance)\b/.test(t)) return "portfolio";
   if (/\b(market|trending|moving|movers|top)\b/.test(t)) return "market";

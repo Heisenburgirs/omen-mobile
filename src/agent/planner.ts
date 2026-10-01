@@ -3,6 +3,7 @@ import { guessIntent, type Intent } from "./intent";
 import { TIER_CRITERIA, type Tier } from "./models";
 import { TOOLS, type Tool } from "./registry";
 import { xHandles, xPostId } from "./extract";
+import { isResearch } from "./tools";
 
 // The agent's plan for one message: which tools to run and which kind of
 // answer to write. Jev is the core of it. One call asks, for every tool,
@@ -131,7 +132,7 @@ export function keywordPlan(text: string): Plan {
   const tier: Tier =
     intent === "chat"
       ? "chat"
-      : /\b(should i|worth|good (buy|investment)|risk|hold|recommend)\b/.test(t)
+      : isResearch(text) || /\b(should i|worth|good (buy|investment)|risk|hold|recommend)\b/.test(t)
         ? "judge"
         : /\b(why|explain|compare|versus|vs)\b/.test(t)
           ? "explain"

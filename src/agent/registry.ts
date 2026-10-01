@@ -3,12 +3,14 @@ import {
   dividendSummary,
   dripRules,
   findAssets,
+  isResearch,
+  marketScan,
   mentionedSymbols,
   portfolioSummary,
   recentDividends,
   type Fetcher,
 } from "./tools";
-import { EXTERNAL_TOOLS } from "./external-tools";
+import { EXTERNAL_TOOLS, postsForWriter } from "./external-tools";
 
 // Everything the agent can look up or prepare, as one registry. Jev reads
 // each tool's `describe` line and says whether a message needs it; code
@@ -162,10 +164,28 @@ export const TOOLS: Tool[] = [
   },
   {
     id: "market",
-    describe: "what is moving in the market right now: top tokens by volume",
+    describe:
+      "what is moving in the market now, new launches and low-cap tokens: the lists to pick ideas and potential plays from",
     kind: "read",
     source: "omen",
-    run: async (ctx) => ({ data: await findAssets(ctx.fetch, "") }),
+    run: async (ctx) => {
+      const scan = await marketScan(ctx.fetch, ctx.text);
+      // Research wants the crowd too: one X search over the shortlist's
+      // cashtags (top posts, last day), paid from the agent's balance.
+      if (ctx.paid && isResearch(ctx.text) && scan.symbols.length) {
+        try {
+          const query = scan.symbols.slice(0, 4).map((s) => "$" + s).join(" OR ");
+          const call = await ctx.paid("x.search", { query, sort: "top", sinceMinutes: 1_440, pages: 1 });
+          return {
+            data: scan.data + "\nxChatter: " + compact({ query, posts: postsForWriter(call.data, 12) }, 3_500),
+            costMicro: call.costMicro ?? 0,
+          };
+        } catch {
+          // The scan stands on its own.
+        }
+      }
+      return { data: scan.data };
+    },
   },
   {
     id: "quote",

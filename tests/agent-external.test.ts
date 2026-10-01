@@ -138,3 +138,20 @@ test("a paid lookup without a funded agent says so instead of calling", async ()
   const noHandle = await toolById("x_posts")!.run(context("posts from x", []));
   assert.match(noHandle.data, /no X account named/);
 });
+
+test("a request for plays is market research, judged, with the market scan", async () => {
+  const { isResearch } = await import("../src/agent/tools");
+  for (const text of [
+    "research new low caps/tokens i can buy that can potentially 10x",
+    "find me some gems under $5m",
+    "what should I buy today",
+    "any good plays this week?",
+  ]) {
+    assert.ok(isResearch(text), text);
+    assert.equal(guessIntent(text), "market", text);
+    const plan = keywordPlan(text);
+    assert.deepEqual(plan.tools, ["market"], text);
+    assert.equal(plan.tier, "judge", text);
+  }
+  assert.equal(isResearch("what is my ZEC worth"), false);
+});

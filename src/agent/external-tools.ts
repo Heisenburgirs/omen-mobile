@@ -72,6 +72,8 @@ function postLine(p: Post) {
 }
 
 const posts = (data: unknown, limit = 30) => ((data as { posts?: Post[] }).posts ?? []).slice(0, limit).map(postLine);
+/** X posts as the writer reads them, for a tool outside this file that bought them. */
+export const postsForWriter = posts;
 
 function needHandle(ctx: ToolContext): string | ToolResult {
   const handle = xHandles(ctx.text)[0];

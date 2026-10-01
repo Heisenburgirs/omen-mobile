@@ -28,7 +28,7 @@ export const MODELS: Record<Tier, ModelChoice> = {
   },
   judge: {
     model: env("EXPO_PUBLIC_AGENT_MODEL_JUDGE") || "anthropic/claude-sonnet-5.5",
-    maxTokens: 700,
+    maxTokens: 900,
     label: "sonnet-5.5",
   },
 };
@@ -46,5 +46,5 @@ export const TIER_GUIDANCE: Record<Tier, string> = {
   lookup: "State the facts from the data plainly, with the numbers. Two to four sentences or a short list.",
   explain: "Explain what the data shows and why, comparing where useful. Keep it under eight sentences.",
   judge:
-    "Weigh the data like an analyst: what supports the case, what argues against it, the main risks, and what would change your view. End with a clear, hedged view and what the user could do next. Never promise returns.",
+    "Argue it like an analyst with a view: the case for, the case against, the real risks, then your call and what would change it. When asked for ideas or plays, give ranked names with a reason and a risk each, and say which you would take first. Be direct; probabilities and conditions, never disclaimers.",
 };
