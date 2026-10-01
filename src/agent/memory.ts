@@ -1,3 +1,4 @@
+import { durableLine } from "./durable";
 import { kvGet, kvSet } from "./store";
 
 // The agent's two memory blocks, in Hermes Agent's shape so they stay
@@ -36,6 +37,25 @@ export function renderBlock(kind: MemoryKind, entries: string[]): string {
   const percent = Math.round((chars / limit) * 100);
   const body = entries.length ? renderEntries(entries) : "(empty)";
   return `§ ${TITLES[kind]} (${percent}% — ${chars.toLocaleString()}/${limit.toLocaleString()} chars)\n${body}`;
+}
+
+const PURGE_KEY = "agent.memory.purged.2026-10-02";
+/**
+ * One-time clean-up of what earlier builds saved: only behaviour and
+ * presentation preferences stay, budgets and token wishes go.
+ */
+export async function purgeOnce(owner: string): Promise<void> {
+  const flag = `${PURGE_KEY}.${owner}`;
+  if (await kvGet(flag)) return;
+  for (const kind of ["user", "memory"] as const) {
+    const entries = await loadEntries(owner, kind);
+    const kept = entries.filter((e) => {
+      const m = e.match(/^(\w+):\s*(.*)$/);
+      return m ? durableLine(m[1], m[2]) !== null : false;
+    });
+    if (kept.length !== entries.length) await saveEntries(owner, kind, kept);
+  }
+  await kvSet(flag, "1");
 }
 
 export type RememberResult = "added" | "duplicate" | "full";

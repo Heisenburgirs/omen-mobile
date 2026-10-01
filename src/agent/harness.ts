@@ -1,5 +1,6 @@
 import { decide, yes } from "./jev";
-import { loadEntries, remember, renderBlock } from "./memory";
+import { durableLine } from "./durable";
+import { loadEntries, purgeOnce, remember, renderBlock } from "./memory";
 import { MODELS, TIER_GUIDANCE, type Tier } from "./models";
 import { isSmallTalk, keywordPlan, planFromAnswers, planQuestions, type Plan } from "./planner";
 import { learn, recall, signature } from "./presets";
@@ -82,6 +83,7 @@ function historyMessages(history: StoredMessage[], count = 6): ChatMessage[] {
 
 /** The system prompt: identity, how to answer this kind of message, and the memory blocks as a frozen snapshot. */
 export async function systemPrompt(owner: string, tier: Tier): Promise<string> {
+  await purgeOnce(owner);
   const [memory, user] = await Promise.all([loadEntries(owner, "memory"), loadEntries(owner, "user")]);
   return [IDENTITY, TIER_GUIDANCE[tier], renderBlock("user", user), renderBlock("memory", memory)].join("\n\n");
 }
@@ -95,7 +97,12 @@ async function planWithJev(input: TurnInput): Promise<Plan> {
   return planFromAnswers(answers, TOOLS);
 }
 
-/** After the reply: keep a lasting fact about the user, in their own words. */
+/**
+ * After the reply: keep how the user wants the agent to behave or to show
+ * things, in their own words. Nothing about money, holdings or tokens: the
+ * portfolio is read live each turn, and a wish from one chat must not
+ * frame the next.
+ */
 async function review(input: TurnInput, reply: string): Promise<string | undefined> {
   try {
     const answers = await decide(
@@ -105,24 +112,23 @@ async function review(input: TurnInput, reply: string): Promise<string | undefin
         durable: {
           type: "boolean",
           instructions:
-            "Does the user's message state something lasting about them: a preference, a goal, a habit, what they hold, or how they want the agent to behave? Not a one-off question.",
+            "Does the user's message tell the agent, in a lasting way, how to behave or how to present things: tone, length, format, language, what to always include or skip? Not a question, a request, a budget, an amount, a holding, a token they like or want, or a goal.",
         },
         category: {
           type: "choice",
           instructions: "If it does, which kind?",
           criteria: {
-            preference: "How they like things done or shown",
-            goal: "What they are trying to achieve",
-            holding: "What they own or plan to hold",
+            preference: "How they like things shown: format, length, units, what to include",
             style: "How they want the agent to talk or behave",
-            other: "Another lasting fact about them",
+            other: "Anything else, which is not kept",
           },
         },
       },
     );
     if (!yes(answers.durable, 0.7)) return undefined;
     const category = answers.category.type === "choice" ? answers.category.choice : "other";
-    const line = `${category}: ${input.text.replace(/\s+/g, " ").trim().slice(0, 200)}`;
+    const line = durableLine(category, input.text);
+    if (!line) return undefined;
     return (await remember(input.owner, "user", line)) === "added" ? line : undefined;
   } catch {
     return undefined;
