@@ -57,6 +57,12 @@ function StatusBubble({ text }: { text: string }) {
   );
 }
 
+/** A failure before any reply: DNS, no route, the socket dropped. Worth one more try. */
+export function isNetworkBlip(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e);
+  return /network request failed|unable to resolve host|failed to connect|software caused connection abort|ECONNRESET|ENOTFOUND|aborted/i.test(msg);
+}
+
 /** A long press on a bubble copies its text. */
 async function copyMessage(text: string) {
   if (!text) return;
@@ -288,14 +294,24 @@ export function AgentScreen({
         attachments,
         history: history.current,
         // A lookup that has not answered in 8 s is left out of the reply
-        // rather than holding it up.
+        // rather than holding it up. A network blip (the phone just back on
+        // Wi-Fi, DNS not yet answering) gets one more try after a moment.
         fetch: (async (resource: string, params: Record<string, string> = {}) => {
-          const controller = new AbortController();
-          const timer = setTimeout(() => controller.abort(), 8000);
+          const once = async () => {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 8000);
+            try {
+              return await mobileFetch(resource, params, token, controller.signal);
+            } finally {
+              clearTimeout(timer);
+            }
+          };
           try {
-            return await mobileFetch(resource, params, token, controller.signal);
-          } finally {
-            clearTimeout(timer);
+            return await once();
+          } catch (e) {
+            if (!isNetworkBlip(e)) throw e;
+            await new Promise((r) => setTimeout(r, 700));
+            return once();
           }
         }) as Fetcher,
         write: channel.write,
