@@ -1,0 +1,173 @@
+import { postsForWriter } from "./external-tools";
+import { dexRef, postRefs, refsOf, tokenRef, type MessageRefs } from "./refs";
+import type { ToolContext, ToolResult } from "./registry";
+import { xActivity, type WriterPost } from "./scout";
+import { compact, withPeaks, type TokenRow } from "./tools";
+
+// One named token, researched the way a trader would before touching it:
+// where it trades (the main contract, not the copycats), what the chart
+// says (figures, peak, holders), and above all what X says: who is
+// talking, how big they are, whether the calls carry the contract address
+// (the pump-group pattern), when it was first called, and whether the
+// conversation is rising or fading. Each part has its own budget so the X
+// read is never cut off by a long list of pairs.
+
+type DexRow = Parameters<typeof dexRef>[0] & { twitter?: string | null; address?: string; name?: string };
+
+const KOL_FOLLOWERS = 10_000;
+const DAY = 1_440;
+const SIX_HOURS = 360;
+
+/** Accounts large enough that their call moves a small cap, largest first. */
+export function kolsOf(posts: WriterPost[], min = KOL_FOLLOWERS) {
+  const seen = new Map<string, { handle: string; followers: number; posts: number; url?: string }>();
+  for (const p of posts) {
+    if ((p.followers ?? 0) < min) continue;
+    const k = seen.get(p.by) ?? { handle: p.by, followers: p.followers ?? 0, posts: 0, ...(p.url ? { url: p.url } : {}) };
+    k.posts += 1;
+    seen.set(p.by, k);
+  }
+  return [...seen.values()].sort((a, b) => b.followers - a.followers).slice(0, 6);
+}
+
+/** Posts that carry the contract address: calls, not conversation. */
+export function caCalls(posts: WriterPost[], mint: string | undefined) {
+  if (!mint) return 0;
+  return posts.filter((p) => p.text.includes(mint)).length;
+}
+
+/** When X first mentioned it, from the posts in hand. */
+export function firstSeen(posts: WriterPost[]): string | undefined {
+  const times = posts.map((p) => (p.at ? Date.parse(p.at) : NaN)).filter((t) => Number.isFinite(t));
+  return times.length ? new Date(Math.min(...times)).toISOString() : undefined;
+}
+
+const dedupe = (posts: WriterPost[]) => {
+  const seen = new Set<string>();
+  return posts.filter((p) => {
+    const key = p.url ?? `${p.by}:${p.text.slice(0, 60)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
+const isTrade = (text: string) => /^\s*(buy|sell|swap)\b/i.test(text);
+
+/** The dossier on one symbol: text for the writer, refs for the chat, what the X reads cost. */
+export async function tokenDossier(ctx: ToolContext, symbol: string): Promise<{ text: string; refs: MessageRefs; costMicro: number }> {
+  const [indexed, dexRows] = await Promise.all([
+    ctx
+      .fetch<{ data: TokenRow[] }>("tokens", { q: symbol, limit: "3" })
+      .then((r) => (Array.isArray(r.data) ? r.data : []))
+      .catch(() => [] as TokenRow[]),
+    ctx
+      .fetch<{ data: DexRow[] }>("dex", { q: symbol, limit: "4" })
+      .then((r) => (Array.isArray(r.data) ? r.data : []))
+      .catch(() => [] as DexRow[]),
+  ]);
+  const main = dexRows[0];
+  const mint = main?.address;
+  if (!main && !indexed.length) {
+    return { text: `${symbol}: not found on any Solana DEX or in the index`, refs: refsOf([]), costMicro: 0 };
+  }
+
+  // The chart side: peak and holders for the main contract.
+  const [peaked, stats] = await Promise.all([
+    mint ? withPeaks(ctx.fetch, [{ mint }]) : Promise.resolve([] as { peak?: unknown }[]),
+    mint ? ctx.fetch<{ data: unknown }>("stats", { mint }).then((r) => r.data).catch(() => null) : Promise.resolve(null),
+  ]);
+  const peak = peaked[0]?.peak;
+  const handle = main?.twitter?.match(/(?:x|twitter)\.com\/([A-Za-z0-9_]+)/)?.[1];
+
+  // The X side: the conversation (top, last day) and the pulse (latest, last
+  // six hours), for the cashtag and the contract address. Not for a trade
+  // command, and not when the planner is already buying an X search.
+  let costMicro = 0;
+  let posts: WriterPost[] = [];
+  if (ctx.paid && main && !isTrade(ctx.text) && !ctx.planned?.includes("x_search")) {
+    ctx.status?.(`Checking X for $${symbol}`);
+    const query = `($${symbol}${mint ? ` OR ${mint}` : ""}) -is:retweet`;
+    for (const search of [
+      { sort: "top", sinceMinutes: DAY },
+      { sort: "latest", sinceMinutes: SIX_HOURS },
+    ]) {
+      try {
+        const call = await ctx.paid("x.search", { query, ...search, pages: 1 });
+        costMicro += call.costMicro ?? 0;
+        posts.push(...(postsForWriter(call.data, 40) as WriterPost[]));
+      } catch {
+        // The chart stands on its own.
+      }
+    }
+    posts = dedupe(posts);
+  }
+  const x = posts.length ? xActivity(posts) : null;
+  const kols = kolsOf(posts);
+  const lead = [...posts].sort((a, b) => (b.likes ?? 0) + 2 * (b.replies ?? 0) - ((a.likes ?? 0) + 2 * (a.replies ?? 0))).slice(0, 5);
+
+  const sections = [
+    `${symbol}:`,
+    main
+      ? `main contract (the one with the volume; others are copycats): ${compact(
+          {
+            mint,
+            name: main.name,
+            priceUsd: main.priceUsd,
+            marketCap: main.marketCap ?? main.fdv,
+            liquidity: main.liquidityUsd,
+            volume24h: main.volume24h,
+            change24h: main.change24h,
+            ageHours: main.ageHours,
+            ...(handle ? { xAccount: "@" + handle } : {}),
+            ...(peak ? { peak } : {}),
+          },
+          900,
+        )}`
+      : "no Solana DEX pair found",
+    dexRows.length > 1 ? `copycats, ignore unless asked: ${compact(dexRows.slice(1, 4).map((r) => ({ mint: r.address, volume24h: r.volume24h })), 400)}` : "",
+    stats ? `holders and activity: ${compact(stats, 700)}` : "",
+    indexed.length ? `index identity and risk: ${compact(indexed.slice(0, 1), 700)}` : "",
+    x
+      ? `X, last day: ${compact(
+          {
+            xScore: x.score,
+            posts: x.posts,
+            accounts: x.accounts,
+            recentShare6h: x.recentShare,
+            weakAccountShare: x.weakShare,
+            engagement: x.engagement,
+            threads: x.threads,
+            firstSeen: firstSeen(posts),
+            callsCarryingTheCA: caCalls(posts, mint),
+            bigAccounts: kols,
+            topAccounts: x.topAccounts,
+          },
+          1_600,
+        )}`
+      : ctx.paid
+        ? "X: nothing found for the cashtag or the contract in the last day"
+        : "X: not checked (agent unfunded)",
+    lead.length
+      ? `lead posts: ${compact(
+          lead.map((p) => ({ by: p.by, followers: p.followers, at: p.at, likes: p.likes, replies: p.replies, text: p.text.slice(0, 220), url: p.url })),
+          2_400,
+        )}`
+      : "",
+  ].filter(Boolean);
+
+  // The main contract leads the refs so the card and Copy CA show it, not a copycat.
+  const refs = refsOf(
+    [...(main ? [{ ...dexRef(main)!, ...(peak ? { peak: peak as never } : {}) }] : []), ...dexRows.slice(1).map(dexRef), ...indexed.map(tokenRef)],
+    postRefs([...(handle ? [{ by: "@" + handle, url: `https://x.com/${handle}` }] : []), ...lead, ...posts.slice(0, 20)]),
+  );
+  return { text: sections.join("\n"), refs, costMicro };
+}
+
+/** The tool result for several symbols. */
+export async function dossiers(ctx: ToolContext, symbols: string[]): Promise<ToolResult> {
+  const out: { text: string; refs: MessageRefs; costMicro: number }[] = [];
+  for (const s of symbols) out.push(await tokenDossier(ctx, s));
+  const refs = out.reduce<MessageRefs>((acc, d) => ({ tokens: [...acc.tokens, ...d.refs.tokens], posts: [...acc.posts, ...d.refs.posts] }), { tokens: [], posts: [] });
+  return { data: out.map((d) => d.text).join("\n\n"), args: { symbols: symbols.join(",") }, refs, costMicro: out.reduce((s, d) => s + d.costMicro, 0) };
+}

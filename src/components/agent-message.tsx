@@ -5,6 +5,7 @@ import { blocks, type Segment } from "../agent/markup";
 import type { MessageRefs, TokenRef } from "../agent/refs";
 import { assetPrice, pct, usd } from "../domain/market";
 import { showToast } from "../lib/toast";
+import { Icon } from "./market-ui";
 import { chatFonts, tradingColors as colors, tradingFonts as fonts } from "../theme";
 
 // An agent reply drawn as the chat shows it: tickers open their page, X
@@ -67,9 +68,31 @@ function Span({ seg, onToken, onUrl }: { seg: Segment; onToken: (t: TokenRef | n
       );
     case "number":
       return <Text style={[s.figure, { color: seg.direction === "up" ? colors.success : colors.error }]}>{seg.text}</Text>;
+    case "strong":
+      return <Text style={s.strong}>{seg.text}</Text>;
+    case "address":
+      return (
+        <Text
+          style={s.link}
+          accessibilityRole="button"
+          accessibilityLabel="Copy contract address"
+          onPress={() => void copyAddress(seg.address)}
+        >
+          {seg.text}
+          {" "}
+          <View style={s.inlineIcon}>
+            <Icon name="copy" size={13} color={colors.link} />
+          </View>
+        </Text>
+      );
     default:
       return <Text>{seg.text}</Text>;
   }
+}
+
+async function copyAddress(address: string) {
+  await Clipboard.setStringAsync(address);
+  showToast("Contract address copied");
 }
 
 const compactAge = (h: number | null | undefined) =>
@@ -145,6 +168,7 @@ const s = StyleSheet.create({
   body: { fontFamily: chatFonts.regular, fontSize: 16, lineHeight: 24, color: colors.ice },
   strong: { fontFamily: chatFonts.medium, color: colors.ice },
   link: { fontFamily: chatFonts.medium, color: colors.link },
+  inlineIcon: { width: 13, height: 13, justifyContent: "flex-end" },
   figure: { fontFamily: fonts.numericMedium },
   card: {
     backgroundColor: colors.surface,

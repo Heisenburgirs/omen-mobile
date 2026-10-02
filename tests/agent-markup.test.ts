@@ -61,3 +61,19 @@ test("labels and refs read cleanly", () => {
   assert.equal(dexRef({ symbol: "HOOKED", address: "C1m", fdv: 5e6 })?.mint, "C1m");
   assert.deepEqual(postRefs([{ by: "@t1", url: "u" }, { by: "@?" }]), [{ handle: "t1", url: "u" }]);
 });
+
+test("markdown the model slips in is read, not shown, and a contract address becomes a short copy link", () => {
+  const out = blocks("Here's the breakdown:\n\n*   **The Play:** $PUMPE (9fJAWKQpkY93hfuZxrHfh5wEh2AV9vjkWNQfzfbziHd2)\n*   **Risk:** thin\n\n### What changes my mind\nVolume dying.", refs);
+  const paragraphs = out.filter((b) => b.kind === "paragraph");
+  const second = paragraphs[1];
+  assert.ok(second && second.kind === "paragraph");
+  const kinds = second.segments.map((s) => `${s.kind}:${s.text}`);
+  assert.ok(kinds.includes("strong:The Play:"), kinds.join("|"));
+  assert.ok(kinds.includes("address:9fJA…iHd2"), kinds.join("|"));
+  const addr = second.segments.find((s) => s.kind === "address");
+  assert.ok(addr && addr.kind === "address" && addr.address === "9fJAWKQpkY93hfuZxrHfh5wEh2AV9vjkWNQfzfbziHd2");
+  assert.ok(second.segments.some((s) => s.kind === "text" && s.text.startsWith("• ")));
+  assert.ok(!kinds.some((k) => k.includes("**")));
+  const third = paragraphs[2];
+  assert.ok(third && third.kind === "paragraph" && third.segments[0]?.kind === "strong" && third.segments[0].text === "What changes my mind");
+});

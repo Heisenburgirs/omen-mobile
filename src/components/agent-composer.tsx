@@ -1,8 +1,10 @@
+import * as Clipboard from "expo-clipboard";
 import React from "react";
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Icon } from "./market-ui";
 import { tradingColors as colors, chatFonts, space } from "../theme";
 import type { PendingAttachment } from "../agent/attachments";
+import { showToast } from "../lib/toast";
 
 /**
  * The message box: one rounded field with the text on top and, on the line
@@ -33,6 +35,12 @@ export function AgentComposer({
 }) {
   const hasContent = draft.trim().length > 0 || attachments.length > 0;
   const action = listening ? "stop" : hasContent ? "send" : "mic";
+  /** The clipboard's text into the draft, after whatever is there. */
+  const paste = async () => {
+    const text = (await Clipboard.getStringAsync().catch(() => "")).trim();
+    if (!text) return showToast("Nothing to paste");
+    onChangeDraft(draft ? `${draft.replace(/s+$/, "")} ${text}` : text);
+  };
   return (
     <View style={s.wrap}>
       <View style={s.field}>
@@ -78,6 +86,15 @@ export function AgentComposer({
             style={({ pressed }) => [s.tool, { opacity: pressed ? 0.6 : 1 }]}
           >
             <Icon name="plus" size={20} color={colors.ice} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Paste"
+            onPress={() => void paste()}
+            hitSlop={6}
+            style={({ pressed }) => [s.tool, { opacity: pressed ? 0.6 : 1 }]}
+          >
+            <Icon name="paste" size={19} color={colors.ice} />
           </Pressable>
           <Pressable
             accessibilityRole="button"

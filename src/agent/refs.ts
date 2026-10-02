@@ -23,7 +23,7 @@ export type MessageRefs = { tokens: TokenRef[]; posts: PostRef[] };
 export const EMPTY_REFS: MessageRefs = { tokens: [], posts: [] };
 
 const score = (t: TokenRef) =>
-  (t.mint ? 4 : 0) + (t.price != null ? 1 : 0) + (t.marketCap != null ? 1 : 0) + (t.liquidity != null ? 1 : 0) + (t.peak ? 1 : 0);
+  (t.mint ? 4 : 0) + (t.price != null ? 1 : 0) + (t.marketCap != null ? 1 : 0) + (t.liquidity != null ? 1 : 0) + (t.ageHours != null ? 1 : 0) + (t.peak ? 1 : 0);
 
 /** Refs from several tools as one set: one entry per symbol, the fullest kept; one per handle. */
 export function mergeRefs(...parts: (MessageRefs | undefined | null)[]): MessageRefs {

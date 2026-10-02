@@ -174,6 +174,7 @@ export type IconName =
   | "trend"
   | "ticket"
   | "copy"
+  | "paste"
   | "cash"
   | "x"
   | "check"
@@ -224,6 +225,8 @@ export function Icon({
     reward: "M12 3v18M8 7h6a3 3 0 010 6h-4a3 3 0 000 6h6",
     // A banknote: cash.
     cash: "M3 7a1 1 0 011-1h16a1 1 0 011 1v10a1 1 0 01-1 1H4a1 1 0 01-1-1V7zM12 15a3 3 0 100-6 3 3 0 000 6zM6.5 12h.01M17.5 12h.01",
+    // A clipboard with its clip: paste.
+    paste: "M8 5H6a1 1 0 00-1 1v14a1 1 0 001 1h12a1 1 0 001-1V6a1 1 0 00-1-1h-2M9 3h6a1 1 0 011 1v2a1 1 0 01-1 1H9a1 1 0 01-1-1V4a1 1 0 011-1z",
     // Two squares, one behind the other: copy.
     copy: "M9 9h10a1 1 0 011 1v10a1 1 0 01-1 1H9a1 1 0 01-1-1V10a1 1 0 011-1zM5 15H4a1 1 0 01-1-1V4a1 1 0 011-1h10a1 1 0 011 1v1",
     // A ticket with a notch on each side: a referral code.

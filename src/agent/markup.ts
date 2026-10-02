@@ -7,6 +7,8 @@ import type { MessageRefs, TokenRef } from "./refs";
 
 export type Segment =
   | { kind: "text"; text: string }
+  | { kind: "strong"; text: string }
+  | { kind: "address"; text: string; address: string }
   | { kind: "ticker"; text: string; token: TokenRef | null }
   | { kind: "handle"; text: string; url: string }
   | { kind: "url"; text: string; url: string; label: string }
@@ -28,19 +30,33 @@ export function urlLabel(url: string): string {
   return bare.length > 34 ? `${bare.slice(0, 33)}…` : bare;
 }
 
+/**
+ * The markdown a model slips in despite the prompt, read rather than shown:
+ * "* " and "- " bullets become "• ", "#" headers become bold lines.
+ */
+export function plainLines(text: string): string {
+  return text
+    .split("\n")
+    .map((line) => line.replace(/^(\s*)[*\-]\s+/, "$1• ").replace(/^\s*#{1,6}\s+(.+?)\s*#*$/, "**$1**"))
+    .join("\n");
+}
+
 /** The segments of one paragraph. */
-export function segments(text: string, refs: MessageRefs): Segment[] {
+export function segments(raw: string, refs: MessageRefs): Segment[] {
+  const text = plainLines(raw);
   const bySymbol = new Map(refs.tokens.map((t) => [t.symbol.toUpperCase(), t]));
   const byHandle = new Map(refs.posts.map((p) => [p.handle.toLowerCase(), p]));
   const known = [...bySymbol.keys()].filter((s) => s.length >= 2);
   const bare = known.length ? `|(^|[^A-Za-z0-9$@])(${known.map(escape).join("|")})(?![A-Za-z0-9])` : "";
-  // In order: a URL, an @handle, a $ticker, a signed figure, "up/down N%", a bare known symbol.
+  // In order: a URL, an @handle, a $ticker, a signed figure, "up/down N%", bold, a contract address, a bare known symbol.
   const re = new RegExp(
     String.raw`(https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"])` +
       String.raw`|(^|[^A-Za-z0-9_])(@[A-Za-z0-9_]{2,15})` +
       String.raw`|(\$[A-Za-z][A-Za-z0-9]{1,9})(?![A-Za-z0-9])` +
       String.raw`|(^|[\s(])([+\-−]\$?\d[\d,]*(?:\.\d+)?(?:%|[KMB])?)(?![A-Za-z0-9])` +
       String.raw`|\b(up|down|gained|lost|rose|fell)(\s+)(\$?\d[\d,]*(?:\.\d+)?(?:%|[KMB])?)(?![A-Za-z0-9])` +
+      String.raw`|\*\*([^*\n]+?)\*\*` +
+      String.raw`|(^|[^A-Za-z0-9])([1-9A-HJ-NP-Za-km-z]{32,44})(?![A-Za-z0-9])` +
       bare,
     "gi",
   );
@@ -54,7 +70,7 @@ export function segments(text: string, refs: MessageRefs): Segment[] {
   for (const m of text.matchAll(re)) {
     const start = m.index ?? 0;
     if (start > last) push({ kind: "text", text: text.slice(last, start) });
-    const [url, hPre, handle, cashtag, nPre, signed, word, gap, figure, bPre, symbol] = m.slice(1);
+    const [url, hPre, handle, cashtag, nPre, signed, word, gap, figure, bold, aPre, address, bPre, symbol] = m.slice(1);
     if (url) push({ kind: "url", text: url, url, label: urlLabel(url) });
     else if (handle) {
       push({ kind: "text", text: hPre ?? "" });
@@ -68,6 +84,11 @@ export function segments(text: string, refs: MessageRefs): Segment[] {
     } else if (word) {
       push({ kind: "text", text: `${word}${gap}` });
       push({ kind: "number", text: figure, direction: /^(up|gained|rose)$/i.test(word) ? "up" : "down" });
+    } else if (bold) {
+      push({ kind: "strong", text: bold });
+    } else if (address) {
+      push({ kind: "text", text: aPre ?? "" });
+      push({ kind: "address", text: `${address.slice(0, 4)}…${address.slice(-4)}`, address });
     } else if (symbol) {
       push({ kind: "text", text: bPre ?? "" });
       push({ kind: "ticker", text: symbol, token: bySymbol.get(symbol.toUpperCase()) ?? null });
@@ -80,7 +101,7 @@ export function segments(text: string, refs: MessageRefs): Segment[] {
 
 /** The reply as blocks: each paragraph led by the cards of the tokens it names first. */
 export function blocks(text: string, refs: MessageRefs): Block[] {
-  const paragraphs = text
+  const paragraphs = plainLines(text)
     .replace(/\r\n/g, "\n")
     .split(/\n{2,}/)
     .map((p) => p.trim())

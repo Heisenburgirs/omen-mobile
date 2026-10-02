@@ -16,6 +16,7 @@ import {
 } from "./tools";
 import { EXTERNAL_TOOLS, postsForWriter } from "./external-tools";
 import { SCOUT } from "./scout-tool";
+import { dossiers } from "./dossier";
 import { solanaRefs } from "./extract";
 import { dexRef, mergeRefs, postRefs, refsOf, tokenRef, type MessageRefs } from "./refs";
 import type { TokenRow } from "./tools";
@@ -242,7 +243,7 @@ export const TOOLS: Tool[] = [
   {
     id: "tokens",
     describe:
-      "a Solana token the user names, including a launch minutes old: price, FDV, liquidity, volume, age, buys and sells, its site and X; or the trending and curated lists (majors, stocks, ETFs, RWAs, metals, stablecoins)",
+      "a Solana token the user names, including a launch minutes old: its main contract, price, cap, liquidity, volume, age, peak, holders, and who on X is talking about it (big accounts, calls carrying the contract, momentum); or the trending and curated lists (majors, stocks, ETFs, RWAs, metals, stablecoins)",
     kind: "read",
     source: "omen",
     run: async (ctx) => {
@@ -252,56 +253,9 @@ export const TOOLS: Tool[] = [
         return { data: compact(data, 3000), args: { mint: addresses[0] } };
       }
       const symbols = mentionedSymbols(ctx.text).slice(0, 3);
-      if (symbols.length) {
-        // Two looks per symbol: the index (identity, issuer, risk) and the
-        // DEX pairs (where it actually trades, however new).
-        let xCost = 0;
-        const found = await Promise.all(
-          symbols.map(async (s) => {
-            const [indexed, anyChain] = await Promise.all([
-              ctx.fetch<{ data: TokenRow[] }>("tokens", { q: s, limit: "3" })
-                .then((r) => (Array.isArray(r.data) ? r.data : []))
-                .then((rows) => withPeaks(ctx.fetch, rows))
-                .catch(() => []),
-              ctx.fetch<{ data: unknown[] }>("dex", { q: s, limit: "4" }).then((r) => (Array.isArray(r.data) ? r.data : [])).catch(() => []),
-            ]);
-            type DexRow = Parameters<typeof dexRef>[0] & { twitter?: string | null; address?: string };
-            const dexRows = anyChain as DexRow[];
-            // The main contract is the one people trade; the rest are copycats.
-            const main = dexRows[0];
-            const mainPeaked = main?.address ? await withPeaks(ctx.fetch, [{ mint: main.address }]) : [];
-            const refs = refsOf([...indexed.map(tokenRef), ...dexRows.map(dexRef)]);
-            if (!indexed.length && !dexRows.length) return { text: `${s}: not found on any Solana DEX or in the index`, refs, posts: [] as ReturnType<typeof postsForWriter> };
-            const chatter: ReturnType<typeof postsForWriter> = [];
-            // Research on a named token wants X too: one search for the cashtag and
-            // the project's own account (from DexScreener), unless the planner is
-            // already buying an X search this turn.
-            const handle = main?.twitter?.match(/(?:x|twitter)\.com\/([A-Za-z0-9_]+)/)?.[1];
-            if (ctx.paid && main && !ctx.planned?.includes("x_search") && (isResearch(ctx.text) || /\b(should i|worth|buy|thoughts?|opinion|look)\b/i.test(ctx.text))) {
-              try {
-                ctx.status?.(`Checking X for $${s}`);
-                const query = handle ? `$${s} OR from:${handle}` : `$${s}`;
-                const call = await ctx.paid("x.search", { query, sort: "top", sinceMinutes: 2_880, pages: 1 });
-                chatter.push(...postsForWriter(call.data, 12));
-                xCost += call.costMicro ?? 0;
-              } catch {
-                // The token's figures stand on their own.
-              }
-            }
-            const text = `${s}: ${compact(
-              {
-                ...(main ? { mainContract: { mint: main.address, ...(handle ? { xAccount: "@" + handle } : {}), ...(mainPeaked[0]?.peak ? { peak: mainPeaked[0].peak } : {}) } } : {}),
-                onDexes: dexRows,
-                solanaIndex: indexed,
-                ...(chatter.length ? { xChatter: chatter } : {}),
-              },
-              handle ? 5_200 : 2_600,
-            )}`;
-            return { text, refs: refsOf(refs.tokens, postRefs([...(handle ? [{ by: "@" + handle, url: `https://x.com/${handle}` }] : []), ...chatter])), posts: chatter };
-          }),
-        );
-        return { data: found.map((f) => f.text).join("\n"), args: { symbols: symbols.join(",") }, refs: mergeRefs(...found.map((f) => f.refs)), costMicro: xCost };
-      }
+      // A named token gets the dossier: main contract, chart, holders, and
+      // above all who on X is talking about it and how.
+      if (symbols.length) return dossiers(ctx, symbols);
       const list = curatedListOf(ctx.text) ?? "trending";
       const { data } = await ctx.fetch<{ data: TokenRow[] }>("tokens", { list, limit: "25" });
       return { data: compact({ list, tokens: data }, 8000), args: { list } };

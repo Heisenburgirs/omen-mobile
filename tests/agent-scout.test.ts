@@ -59,3 +59,18 @@ test("the lead post is the most engaged one and its id comes from the url", () =
   assert.equal(postIdOf(leadPost(posts)?.url), "987654321");
   assert.equal(postIdOf(undefined), undefined);
 });
+
+test("the dossier's X read: big accounts, calls carrying the CA, first seen", async () => {
+  const { kolsOf, caCalls, firstSeen } = await import("../src/agent/dossier");
+  const mint = "9fJAWKQpkY93hfuZxrHfh5wEh2AV9vjkWNQfzfbziHd2";
+  const posts = [
+    post("@big", "$ABC " + mint, { followers: 120_000, at: new Date(now - 5 * 3600e3).toISOString() }),
+    post("@big", "$ABC again", { followers: 120_000 }),
+    post("@mid", "$ABC CA: " + mint, { followers: 15_000 }),
+    post("@small", "$ABC", { followers: 300 }),
+  ];
+  const kols = kolsOf(posts);
+  assert.deepEqual(kols.map((k) => [k.handle, k.posts]), [["@big", 2], ["@mid", 1]]);
+  assert.equal(caCalls(posts, mint), 2);
+  assert.equal(firstSeen(posts), new Date(now - 5 * 3600e3).toISOString());
+});
