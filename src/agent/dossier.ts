@@ -162,7 +162,12 @@ export async function tokenDossier(ctx: ToolContext, symbol: string): Promise<{ 
       : "no Solana DEX pair found",
     dexRows.length > 1 ? `copycats, ignore unless asked: ${compact(dexRows.slice(1, 4).map((r) => ({ mint: r.address, volume24h: r.volume24h })), 400)}` : "",
     stats ? `holders and activity: ${compact(stats, 700)}` : "",
-    indexed.length ? `index identity and risk: ${compact(indexed.slice(0, 1), 700)}` : "",
+    indexed.length
+      ? `index identity and risk (figures here can lag; the main contract's are current): ${compact(
+          indexed.slice(0, 1).map((r) => ({ symbol: r.symbol, name: r.name, mint: r.mint, issuer: r.issuer, trustTier: r.trustTier, ...("risk" in r ? { risk: (r as { risk?: unknown }).risk } : {}) })),
+          600,
+        )}`
+      : "",
     x
       ? `X, last day: ${compact(
           {

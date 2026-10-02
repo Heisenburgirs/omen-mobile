@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { View, Text, Pressable } from "react-native";
-import Svg, { Path, Line, Rect, Circle } from "react-native-svg";
+import Svg, { Path, Line, Rect, Circle, Defs, LinearGradient, Stop } from "react-native-svg";
 import type { Candle } from "../domain/models";
 import { assetPrice, cleanCandles } from "../domain/market";
 import { tradingColors as colors } from "../theme";
@@ -48,6 +48,10 @@ export function PriceChart({
   // Bars with no trades are simply absent; the line carries across them.
   const segments: string[] = [];
   const pts = c.map((b, i) => [x(i), y(b.close)] as const);
+  // The line reads the period: green when it ends above where it began,
+  // red below, with a soft fill fading to the floor beneath it.
+  const up = (c.at(-1)?.close ?? 0) >= (c[0]?.close ?? 0);
+  const tone = up ? colors.success : colors.error;
   if (pts.length) {
     let path = `M${pts[0][0]} ${pts[0][1]}`;
     for (let i = 0; i < pts.length - 1; i++) {
@@ -119,17 +123,22 @@ export function PriceChart({
                     </React.Fragment>
                   );
                 })
-              : segments.map((d, i) => (
-                  <Path
-                    key={i}
-                    d={d}
-                    fill="none"
-                    stroke={colors.focus}
-                    strokeWidth={2.5}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                ))}
+              : (
+                  <>
+                    <Defs>
+                      <LinearGradient id="fill" x1="0" y1="0" x2="0" y2="1">
+                        <Stop offset="0" stopColor={tone} stopOpacity={0.28} />
+                        <Stop offset="1" stopColor={tone} stopOpacity={0} />
+                      </LinearGradient>
+                    </Defs>
+                    {segments.map((d, i) => (
+                      <Path key={"a" + i} d={`${d} L${pts.at(-1)?.[0] ?? 0} ${h} L${pts[0]?.[0] ?? 0} ${h} Z`} fill="url(#fill)" stroke="none" />
+                    ))}
+                    {segments.map((d, i) => (
+                      <Path key={i} d={d} fill="none" stroke={tone} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+                    ))}
+                  </>
+                )}
             {selected !== null && c[selected] ? (
               <>
                 <Line
