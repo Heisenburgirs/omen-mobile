@@ -26,6 +26,7 @@ export const MAJORS = new Set([
   "WIF", "BONK", "JUP", "PYTH", "JTO", "RAY", "ORCA", "PUMP", "TRUMP", "HYPE", "ENA", "ONDO", "RENDER", "FARTCOIN",
   "SPX", "QQQ", "NVDA", "TSLA", "AAPL", "MSFT", "AMZN", "GOOGL", "META", "COIN", "MSTR", "HOOD", "GOLD", "USD", "EUR",
   "CA", "DEX", "AI", "NFT", "APR", "APY", "ATH", "ATL", "MC", "FDV", "LP", "TVL", "ROI", "PNL", "OTC", "IPO", "ETF",
+  "SEC", "FED", "CEO", "USA", "UK", "EU", "GDP", "CPI", "NYSE", "UAW", "DOJ", "FBI", "CIA", "NASA", "GOP", "DNC",
 ]);
 
 const CASHTAG = /\$([A-Za-z][A-Za-z0-9]{1,9})(?![A-Za-z0-9])/g;

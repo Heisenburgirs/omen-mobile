@@ -20,8 +20,8 @@ type Dex = Parameters<typeof dexRef>[0] & { twitter?: string | null; address?: s
 
 /** The discovery searches: launch chatter now, and gem talk today. */
 const DISCOVERY = [
-  { query: '(solana OR "$SOL" OR pumpfun OR "pump.fun" OR launchlab OR bonk OR stonk) (CA OR launched OR launch OR sending OR aped OR "100x" OR gem OR runner OR cooking) -is:retweet min_faves:3', sort: "latest", sinceMinutes: SIX_HOURS },
-  { query: '(solana OR sol) (gem OR runner OR "next 100x" OR "low cap" OR microcap OR "early") -is:retweet min_faves:10', sort: "top", sinceMinutes: DAY },
+  { query: '(solana OR "$SOL" OR pumpfun OR "pump.fun" OR launchlab OR bonk OR stonk) (CA OR launched OR launch OR sending OR aped OR "100x" OR gem OR runner OR cooking) -is:retweet min_faves:3', sort: "latest", sinceMinutes: SIX_HOURS, pages: 2 },
+  { query: '(solana OR sol) (gem OR runner OR "next 100x" OR "low cap" OR microcap OR "early") -is:retweet min_faves:10', sort: "top", sinceMinutes: DAY, pages: 1 },
 ] as const;
 
 async function paid(ctx: ToolContext, tool: string, input: Record<string, unknown>) {
@@ -52,7 +52,7 @@ export const SCOUT: Tool = {
     const discovery: WriterPost[] = [];
     for (const d of DISCOVERY) {
       try {
-        const call = await paid(ctx, "x.search", { query: d.query, sort: d.sort, sinceMinutes: d.sinceMinutes, pages: 1 });
+        const call = await paid(ctx, "x.search", { query: d.query, sort: d.sort, sinceMinutes: d.sinceMinutes, pages: d.pages });
         charge(call);
         discovery.push(...(postsForWriter(call.data, 60) as WriterPost[]));
       } catch {
