@@ -60,12 +60,9 @@ export function toolStatus(id: string, text: string): string {
   }
 }
 
-/** The line for the steps still running: up to two named, the rest counted. */
+/** The one line to show: the step that started last and is still running. */
 export function statusLine(running: string[]): string {
-  const unique = [...new Set(running)];
-  if (unique.length === 0) return "";
-  if (unique.length <= 2) return unique.join(" · ");
-  return `${unique.slice(0, 2).join(" · ")} +${unique.length - 2}`;
+  return running[running.length - 1] ?? "";
 }
 
 /** What the writing step says, by the kind of answer. */

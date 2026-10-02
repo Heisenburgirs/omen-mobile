@@ -9,6 +9,19 @@ const NOT_HANDLES = new Set(
   "the a an my me this that his her their them him x twitter posts tweets post tweet account user handle latest last recent top today yesterday".split(" "),
 );
 
+/** The chain a message names, in DexScreener's ids: "on robinhood", "on solana", "on base". */
+export function chainHint(text: string): string | undefined {
+  const t = text.toLowerCase();
+  if (/\brobinhood\b|\brh chain\b/.test(t)) return "robinhood";
+  if (/\bsolana\b/.test(t)) return "solana";
+  if (/\bon base\b|\bbase chain\b/.test(t)) return "base";
+  if (/\bethereum\b|\bon eth\b/.test(t)) return "ethereum";
+  if (/\bbsc\b|\bbnb chain\b/.test(t)) return "bsc";
+  if (/\barbitrum\b/.test(t)) return "arbitrum";
+  if (/\bhyperliquid\b|\bhyperevm\b/.test(t)) return "hyperevm";
+  return undefined;
+}
+
 /** X handles the user named: @handle, x.com/handle or twitter.com/handle, or "posts from handle on X". */
 export function xHandles(text: string): string[] {
   const out = new Set<string>();

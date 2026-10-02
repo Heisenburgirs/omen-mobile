@@ -12,7 +12,7 @@ import {
   type Fetcher,
 } from "./tools";
 import { EXTERNAL_TOOLS, postsForWriter } from "./external-tools";
-import { solanaRefs } from "./extract";
+import { chainHint, solanaRefs } from "./extract";
 import type { TokenRow } from "./tools";
 
 // Everything the agent can look up or prepare, as one registry. Jev reads
@@ -224,7 +224,7 @@ export const TOOLS: Tool[] = [
   {
     id: "tokens",
     describe:
-      "any Solana token, beyond OMEN's own index: what is trending on chain, the curated lists (majors, stocks, ETFs, RWAs, metals, stablecoins), or a named token's market stats, issuer and risk score",
+      "a token the user names on any chain (Solana, Robinhood Chain, Base, Ethereum, BNB), including launches minutes old: price, FDV, liquidity, volume, age, buys and sells, its site and X; or Solana's trending and curated lists (majors, stocks, ETFs, RWAs, metals, stablecoins)",
     kind: "read",
     source: "omen",
     run: async (ctx) => {
@@ -235,8 +235,18 @@ export const TOOLS: Tool[] = [
       }
       const symbols = mentionedSymbols(ctx.text).slice(0, 3);
       if (symbols.length) {
+        // Two looks per symbol: Solana's index (identity, issuer, risk) and
+        // every chain's DEX pairs (where it actually trades, however new).
+        const chain = chainHint(ctx.text);
         const found = await Promise.all(
-          symbols.map((s) => ctx.fetch<{ data: TokenRow[] }>("tokens", { q: s, limit: "4" }).then((r) => `${s}: ${compact(r.data, 2200)}`).catch(() => `${s}: unavailable`)),
+          symbols.map(async (s) => {
+            const [indexed, anyChain] = await Promise.all([
+              ctx.fetch<{ data: TokenRow[] }>("tokens", { q: s, limit: "3" }).then((r) => (Array.isArray(r.data) ? r.data : [])).catch(() => []),
+              ctx.fetch<{ data: unknown[] }>("dex", { q: s, limit: "4", ...(chain ? { chain } : {}) }).then((r) => (Array.isArray(r.data) ? r.data : [])).catch(() => []),
+            ]);
+            if (!indexed.length && !anyChain.length) return `${s}: not found on any chain's DEXes or in Solana's index`;
+            return `${s}: ${compact({ onDexes: anyChain, solanaIndex: indexed }, 2600)}`;
+          }),
         );
         return { data: found.join("\n"), args: { symbols: symbols.join(",") } };
       }
