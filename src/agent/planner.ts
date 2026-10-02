@@ -46,7 +46,7 @@ export type Source = keyof typeof SOURCE_CRITERIA;
 export const SOURCE_TOOLS: Record<Source, readonly string[]> = {
   app: [],
   x_account: ["x_posts", "x_profile", "x_mentions"],
-  x_topic: ["x_search"],
+  x_topic: ["x_search", "scout"],
   x_post: ["x_replies"],
   web: ["web_search", "web_research"],
   chain: ["chain_lookup"],

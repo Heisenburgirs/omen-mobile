@@ -140,7 +140,7 @@ test("a paid lookup without a funded agent says so instead of calling", async ()
 });
 
 test("a request for plays is market research, judged, with the market scan", async () => {
-  const { isResearch } = await import("../src/agent/tools");
+  const { isResearch, mentionedSymbols } = await import("../src/agent/tools");
   for (const text of [
     "research new low caps/tokens i can buy that can potentially 10x",
     "find me some gems under $5m",
@@ -152,6 +152,7 @@ test("a request for plays is market research, judged, with the market scan", asy
     const plan = keywordPlan(text);
     assert.deepEqual(plan.tools, ["market"], text);
     assert.equal(plan.tier, "judge", text);
+    assert.ok(!mentionedSymbols(text).length, text);
   }
   assert.equal(isResearch("what is my ZEC worth"), false);
 });

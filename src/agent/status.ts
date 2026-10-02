@@ -33,6 +33,8 @@ export function toolStatus(id: string, text: string): string {
       return "Checking your drip rules";
     case "market":
       return "Scanning the market";
+    case "scout":
+      return "Scouting X for new tickers";
     case "tokens":
       return "Looking through tokens";
     case "recall":

@@ -15,6 +15,7 @@ import {
   type Fetcher,
 } from "./tools";
 import { EXTERNAL_TOOLS, postsForWriter } from "./external-tools";
+import { SCOUT } from "./scout-tool";
 import { chainHint, solanaRefs } from "./extract";
 import { dexRef, mergeRefs, postRefs, refsOf, tokenRef, type MessageRefs } from "./refs";
 import type { TokenRow } from "./tools";
@@ -72,6 +73,8 @@ export type Tool = {
   kind: "read" | "prepare";
   source: ToolSource;
   run: (ctx: ToolContext) => Promise<ToolResult>;
+  /** How long the harness waits for it; a multi-step paid lookup needs more than the 30 s default. */
+  timeoutMs?: number;
 };
 
 export type Period = "24h" | "7d" | "30d" | "All";
@@ -318,6 +321,6 @@ export const TOOLS: Tool[] = [
 ];
 
 // The app's own data first, then what the agent buys per call.
-TOOLS.push(...EXTERNAL_TOOLS);
+TOOLS.push(...EXTERNAL_TOOLS, SCOUT);
 
 export const toolById = (id: string) => TOOLS.find((t) => t.id === id);

@@ -12,6 +12,7 @@ import { attachmentContext, type PendingAttachment } from "./attachments";
 import { statusLine, toolStatus, writingStatus } from "./status";
 import { mergeRefs, type MessageRefs } from "./refs";
 import { isAgentBalance } from "./intent";
+import { isResearch, mentionedSymbols } from "./tools";
 export { guessIntent, type Intent } from "./intent";
 
 // One turn of the agent. Jev decides, code does, a model writes:
@@ -74,6 +75,7 @@ How you work:
 - Have views. Asked what to buy, what could run, what looks strong or weak, or for plays, gems or low caps: name concrete tokens from the data, ranked, each with its reason (catalyst, momentum, volume, liquidity, age, dividends, who is talking about it) and its main risk. Say which you would take first and what would change your mind. Never give a canned allocation ("1-2% of your portfolio", "a small position"): either size it in dollars from their actual cash and what the liquidity could absorb, or say nothing about size.
 - Say what you think plainly. Never write "this is not financial advice", "do your own research", "consult a professional", "I can't recommend" or any other disclaimer, and never refuse to give a view: the user has been warned and chose this tool. Put uncertainty into a probability or a condition, not a refusal.
 - Be honest about evidence. Thin liquidity, a token a day old, a few anonymous accounts shilling, no volume: name it as the risk it is. A small cap can go to zero; say it once when it matters, as a fact, then still give your pick.
+- Plays come from the scout, not from the index. When the data has scout candidates, rank them by what has not run yet: a conversation that is rising from a low base (recentShare high, real accounts, replies that argue rather than shill), a small cap, a young chart, and no peak days old. The index's top-volume tokens are what already ran; name them only to say so. Cite the accounts and posts you lean on by handle and link, and say what the X score is made of when it matters.
 - Read the peak. Each token's data may carry where it peaked: athMarketCap, hoursSinceAth, fromAthPct (negative = below the peak). A token that already ran to a far higher cap and sits 60% or more below it with the peak more than a day old is a play that happened: the attention came, bought, sold and left. Do not call it a good buy because the entry looks cheap; it needs a new catalyst, and say so. Prefer tokens at or near their highs with volume still rising, or ones nobody has found yet.
 Rules:
 - Two balances exist. The user's portfolio is their own wallet. The agent's balance is the USDC the user funded you with, which pays for your replies. Never give one when asked for the other.
@@ -166,6 +168,9 @@ export async function runTurn(input: TurnInput): Promise<TurnResult> {
   // The agent's own balance is read on the phone; a saved preset or Jev
   // could mistake it for the user's portfolio, so neither is asked.
   else if (isAgentBalance(input.text)) plan = { tools: ["agent_balance"], tier: "lookup", source: "keywords" };
+  // A request for plays is the scout's job: X first, then the chart. Jev is
+  // not asked, so a preset cannot route it to the index's top list again.
+  else if (isResearch(input.text) && !mentionedSymbols(input.text).length) plan = { tools: ["scout"], tier: "judge", source: "keywords" };
   else {
     plan =
       recall(presets, sig) ??
@@ -209,7 +214,7 @@ export async function runTurn(input: TurnInput): Promise<TurnResult> {
         // A paid lookup that has not answered in 30 s is left out of the reply.
         const result = await Promise.race([
           tool.run(toolCtx),
-          new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timed out")), 30_000)),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timed out")), tool.timeoutMs ?? 30_000)),
         ]);
         Object.assign(args, result.args ?? {});
         toolCostMicro += result.costMicro ?? 0;
