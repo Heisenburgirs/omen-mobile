@@ -82,3 +82,23 @@ test("markdown the model slips in is read, not shown, and a contract address bec
   const third = paragraphs.find((b) => b.kind === "paragraph" && b.segments[0]?.kind === "strong" && b.segments[0].text === "What changes my mind");
   assert.ok(third, "header paragraph");
 });
+
+test("multiples read as one figure, and handles carry who the account is", () => {
+  const segs = segments("It went up 9.7x since the call, then -2.1x is nonsense but +$1.2M is not.", refs);
+  const figures = segs.filter((s) => s.kind === "number").map((s) => s.text);
+  assert.deepEqual(figures, ["9.7x", "-2.1x", "+$1.2M"]);
+  const merged = mergeRefs(
+    { tokens: [], posts: [{ handle: "big", followers: 120_000 }] },
+    { tokens: [], posts: [{ handle: "Big", followers: 90_000, verified: true, since: 2019, url: "https://x.com/big/status/1" }] },
+  );
+  assert.deepEqual(merged.posts, [{ handle: "big", url: "https://x.com/big/status/1", followers: 120_000, verified: true, since: 2019 }]);
+});
+
+test("follower tiers and launchpads read at a glance", async () => {
+  const { followerTier, launchpadOf } = await import("../src/agent/refs");
+  assert.deepEqual([500, 1_000, 10_000, 30_000, 50_000, 100_000, null].map((f) => followerTier(f).label), ["<1K", "1K+", "10K+", "30K+", "50K+", "100K+", "<1K"]);
+  assert.equal(launchpadOf("AeLjtNe7rBpnxdJeqSSBnJ5NcPnuejpY7mhLsyMNpump", "pumpswap"), "pump.fun");
+  assert.equal(launchpadOf("9fJAW", "raydium", true), "stonk");
+  assert.equal(launchpadOf("abcbonk", "raydium"), "launchlab");
+  assert.equal(launchpadOf("9fJAW", "raydium"), null);
+});

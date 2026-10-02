@@ -16,8 +16,35 @@ export type TokenRef = {
   volume24h?: number | null;
   ageHours?: number | null;
   peak?: { athMarketCap: number; fromAthPct: number; hoursSinceAth: number } | null;
+  image?: string;
+  launchpad?: string;
 };
-export type PostRef = { handle: string; url?: string };
+export type PostRef = { handle: string; url?: string; followers?: number; verified?: boolean; since?: number };
+
+/**
+ * An account's size as a badge: the reader knows in a glance whether a
+ * handle is a nobody, a mid account or a whale. Rank orders the tiers.
+ */
+export function followerTier(followers: number | null | undefined): { label: string; rank: number } {
+  const f = followers ?? 0;
+  if (f >= 100_000) return { label: "100K+", rank: 5 };
+  if (f >= 50_000) return { label: "50K+", rank: 4 };
+  if (f >= 30_000) return { label: "30K+", rank: 3 };
+  if (f >= 10_000) return { label: "10K+", rank: 2 };
+  if (f >= 1_000) return { label: "1K+", rank: 1 };
+  return { label: "<1K", rank: 0 };
+}
+
+/** Where a token launched, from its mint, its DEX and the index. */
+export function launchpadOf(mint: string | null | undefined, dex?: string | null, stonk?: boolean): string | null {
+  if (stonk) return "stonk";
+  const d = (dex ?? "").toLowerCase();
+  if (d.includes("pump")) return "pump.fun";
+  if (d.includes("launchlab") || (mint ?? "").endsWith("bonk")) return "launchlab";
+  if ((mint ?? "").endsWith("pump")) return "pump.fun";
+  if (d.includes("meteora") || d.includes("dbc")) return "meteora";
+  return null;
+}
 export type MessageRefs = { tokens: TokenRef[]; posts: PostRef[] };
 
 export const EMPTY_REFS: MessageRefs = { tokens: [], posts: [] };
@@ -41,7 +68,14 @@ export function mergeRefs(...parts: (MessageRefs | undefined | null)[]): Message
       if (!p.handle) continue;
       const key = p.handle.toLowerCase();
       const have = posts.get(key);
-      if (!have || (!have.url && p.url)) posts.set(key, { handle: p.handle, ...(p.url ? { url: p.url } : {}) });
+      const merged: PostRef = {
+        handle: have?.handle ?? p.handle,
+        ...(have?.url || p.url ? { url: have?.url ?? p.url } : {}),
+        ...((have?.followers ?? 0) >= (p.followers ?? 0) ? (have?.followers != null ? { followers: have.followers } : {}) : { followers: p.followers }),
+        ...(have?.verified || p.verified ? { verified: true } : {}),
+        ...(have?.since ?? p.since ? { since: have?.since ?? p.since } : {}),
+      };
+      posts.set(key, merged);
     }
   }
   return { tokens: [...tokens.values()], posts: [...posts.values()] };
@@ -61,6 +95,7 @@ export function tokenRef(row: {
   symbol?: string | null;
   name?: string | null;
   mint?: string | null;
+  image?: string | null;
   price?: unknown;
   change24h?: unknown;
   marketCap?: unknown;
@@ -78,6 +113,7 @@ export function tokenRef(row: {
     symbol: row.symbol,
     ...(row.name ? { name: row.name } : {}),
     ...(row.mint ? { mint: row.mint } : {}),
+    ...(row.image ? { image: row.image } : {}),
     price: num(row.price),
     change24h: num(row.change24h),
     marketCap: num(row.marketCap) ?? num(row.fdv),
@@ -94,6 +130,8 @@ export function dexRef(row: {
   name?: string;
   address?: string;
   url?: string;
+  imageUrl?: string | null;
+  dex?: string;
   priceUsd?: unknown;
   change24h?: unknown;
   marketCap?: unknown;
@@ -107,6 +145,8 @@ export function dexRef(row: {
     symbol: row.symbol,
     ...(row.name ? { name: row.name } : {}),
     ...(row.address ? { mint: row.address } : {}),
+    ...(row.imageUrl ? { image: row.imageUrl } : {}),
+    ...(launchpadOf(row.address, row.dex) ? { launchpad: launchpadOf(row.address, row.dex)! } : {}),
     price: num(row.priceUsd),
     change24h: num(row.change24h),
     marketCap: num(row.marketCap) ?? num(row.fdv),
@@ -117,11 +157,18 @@ export function dexRef(row: {
 }
 
 /** The accounts behind a run of posts, as the writer sees them (by: "@name", url). */
-export function postRefs(posts: { by?: string; url?: string }[]): PostRef[] {
+export function postRefs(posts: { by?: string; url?: string; followers?: number; verified?: boolean; accountSince?: number }[]): PostRef[] {
   const out: PostRef[] = [];
   for (const p of posts) {
     const handle = (p.by ?? "").replace(/^@/, "");
-    if (handle && handle !== "?") out.push({ handle, ...(p.url ? { url: p.url } : {}) });
+    if (handle && handle !== "?")
+      out.push({
+        handle,
+        ...(p.url ? { url: p.url } : {}),
+        ...(p.followers != null ? { followers: p.followers } : {}),
+        ...(p.verified ? { verified: true } : {}),
+        ...(p.accountSince ? { since: p.accountSince } : {}),
+      });
   }
   return out;
 }

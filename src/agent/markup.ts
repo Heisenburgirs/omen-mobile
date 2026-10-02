@@ -53,8 +53,8 @@ export function segments(raw: string, refs: MessageRefs): Segment[] {
     String.raw`(https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"])` +
       String.raw`|(^|[^A-Za-z0-9_])(@[A-Za-z0-9_]{2,15})` +
       String.raw`|(\$[A-Za-z][A-Za-z0-9]{1,9})(?![A-Za-z0-9])` +
-      String.raw`|(^|[\s(])([+\-−]\$?\d[\d,]*(?:\.\d+)?(?:%|[KMB])?)(?![A-Za-z0-9])` +
-      String.raw`|\b(up|down|gained|lost|rose|fell)(\s+)(\$?\d[\d,]*(?:\.\d+)?(?:%|[KMB])?)(?![A-Za-z0-9])` +
+      String.raw`|(^|[\s(])([+\-−]\$?\d[\d,]*(?:\.\d+)?(?:%|[KMBx]|×)?)(?![A-Za-z0-9])` +
+      String.raw`|\b(up|down|gained|lost|rose|fell)(\s+)(\$?\d[\d,]*(?:\.\d+)?(?:%|[KMBx]|×)?)(?![A-Za-z0-9])` +
       String.raw`|\*\*([^*\n]+?)\*\*` +
       String.raw`|(^|[^A-Za-z0-9])([1-9A-HJ-NP-Za-km-z]{32,44})(?![A-Za-z0-9])` +
       bare,

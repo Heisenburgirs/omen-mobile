@@ -1,5 +1,5 @@
 import { postsForWriter } from "./external-tools";
-import { ageText, dexRef, postRefs, refsOf, tokenRef, type MessageRefs } from "./refs";
+import { ageText, dexRef, launchpadOf, postRefs, refsOf, tokenRef, type MessageRefs } from "./refs";
 import { callsFrom, graphOf, graphOfHandle, recordCalls, symbolGraphSummary } from "./xgraph";
 import { cashtagsIn } from "./scout";
 import type { ToolContext, ToolResult } from "./registry";
@@ -14,7 +14,18 @@ import { compact, withPeaks, type TokenRow } from "./tools";
 // conversation is rising or fading. Each part has its own budget so the X
 // read is never cut off by a long list of pairs.
 
-type DexRow = Parameters<typeof dexRef>[0] & { twitter?: string | null; address?: string; name?: string };
+type DexRow = Parameters<typeof dexRef>[0] & {
+  twitter?: string | null;
+  address?: string;
+  name?: string;
+  dex?: string;
+  volume1h?: number;
+  volume5m?: number;
+  buys1h?: number;
+  sells1h?: number;
+  buys5m?: number;
+  sells5m?: number;
+};
 
 const KOL_FOLLOWERS = 10_000;
 const DAY = 1_440;
@@ -22,10 +33,17 @@ const SIX_HOURS = 360;
 
 /** Accounts large enough that their call moves a small cap, largest first. */
 export function kolsOf(posts: WriterPost[], min = KOL_FOLLOWERS) {
-  const seen = new Map<string, { handle: string; followers: number; posts: number; url?: string }>();
+  const seen = new Map<string, { handle: string; followers: number; posts: number; url?: string; verified?: boolean; since?: number }>();
   for (const p of posts) {
     if ((p.followers ?? 0) < min) continue;
-    const k = seen.get(p.by) ?? { handle: p.by, followers: p.followers ?? 0, posts: 0, ...(p.url ? { url: p.url } : {}) };
+    const k = seen.get(p.by) ?? {
+      handle: p.by,
+      followers: p.followers ?? 0,
+      posts: 0,
+      ...(p.url ? { url: p.url } : {}),
+      ...(p.verified ? { verified: true } : {}),
+      ...(p.accountSince ? { since: p.accountSince } : {}),
+    };
     k.posts += 1;
     seen.set(p.by, k);
   }
@@ -154,6 +172,18 @@ export async function tokenDossier(ctx: ToolContext, symbol: string): Promise<{ 
             volume24h: main.volume24h,
             change24h: main.change24h,
             age: ageText(main.ageHours),
+            launchpad: launchpadOf(main.address, main.dex, indexed.some((r) => r.mint === main.address && (r as { stonk?: unknown }).stonk != null)) ?? "unknown",
+            // Flow: what moves the price right now. A cap of 150k on $1k a
+            // minute moves on single buys.
+            flow: {
+              volume5m: main.volume5m ?? null,
+              volume1h: main.volume1h ?? null,
+              perMinute: main.volume1h != null ? Math.round(main.volume1h / 60) : null,
+              buys5m: main.buys5m ?? null,
+              sells5m: main.sells5m ?? null,
+              buys1h: main.buys1h ?? null,
+              sells1h: main.sells1h ?? null,
+            },
             ...(handle ? { xAccount: "@" + handle } : {}),
             ...(peak ? { peak } : {}),
           },
@@ -192,7 +222,7 @@ export async function tokenDossier(ctx: ToolContext, symbol: string): Promise<{ 
     dives.length ? `profile dives (what the biggest callers push): ${compact(dives, 1_400)}` : "",
     lead.length
       ? `lead posts: ${compact(
-          lead.map((p) => ({ by: p.by, followers: p.followers, at: p.at, likes: p.likes, replies: p.replies, text: p.text.slice(0, 220), url: p.url })),
+          lead.map((p) => ({ by: p.by, followers: p.followers, verified: p.verified ?? false, accountSince: p.accountSince, at: p.at, likes: p.likes, replies: p.replies, text: p.text.slice(0, 220), url: p.url })),
           2_400,
         )}`
       : "",

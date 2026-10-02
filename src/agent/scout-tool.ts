@@ -1,5 +1,5 @@
 import { postsForWriter } from "./external-tools";
-import { ageText, dexRef, postRefs, refsOf, type TokenRef } from "./refs";
+import { ageText, dexRef, launchpadOf, postRefs, refsOf, type TokenRef } from "./refs";
 import { callsFrom, graphOf, recordCalls, symbolGraphSummary } from "./xgraph";
 import type { Tool, ToolContext } from "./registry";
 import { candidatesFrom, leadPost, postIdOf, xActivity, type WriterPost } from "./scout";
@@ -16,7 +16,7 @@ import { compact, marketScan, mentionedSymbols, peaksOf } from "./tools";
 const SIX_HOURS = 360;
 const DAY = 1_440;
 
-type Dex = Parameters<typeof dexRef>[0] & { twitter?: string | null; address?: string };
+type Dex = Parameters<typeof dexRef>[0] & { twitter?: string | null; address?: string; dex?: string; volume1h?: number; buys1h?: number; sells1h?: number };
 
 /** The discovery searches: launch chatter now, and gem talk today. */
 const DISCOVERY = [
@@ -142,6 +142,10 @@ export const SCOUT: Tool = {
               volume24h: main.volume24h,
               change24h: main.change24h,
               age: ageText(main.ageHours),
+              launchpad: launchpadOf(main.address, main.dex) ?? "unknown",
+              perMinute: main.volume1h != null ? Math.round(main.volume1h / 60) : null,
+              buys1h: main.buys1h ?? null,
+              sells1h: main.sells1h ?? null,
               ...(main.twitter ? { xAccount: main.twitter } : {}),
             }
           : "no Solana DEX pair found: not tradable in the app; do not pick it",

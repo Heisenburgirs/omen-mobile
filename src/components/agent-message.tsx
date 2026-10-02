@@ -1,8 +1,8 @@
 import * as Clipboard from "expo-clipboard";
 import React, { useMemo } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { blocks, type Segment } from "../agent/markup";
-import type { MessageRefs, TokenRef } from "../agent/refs";
+import { followerTier, type MessageRefs, type PostRef, type TokenRef } from "../agent/refs";
 import { assetPrice, pct, usd } from "../domain/market";
 import { showToast } from "../lib/toast";
 import { Icon } from "./market-ui";
@@ -24,6 +24,7 @@ export function AgentMessage({
   onOpenUrl: (url: string) => void;
 }) {
   const parts = useMemo(() => blocks(text, refs), [text, refs]);
+  const accounts = useMemo(() => new Map(refs.posts.map((p) => [p.handle.toLowerCase(), p])), [refs]);
   const openToken = (t: TokenRef | null) => {
     if (t?.mint) onOpenAsset(t.mint);
   };
@@ -35,7 +36,7 @@ export function AgentMessage({
         ) : (
           <Text key={i} style={s.body}>
             {b.segments.map((seg, j) => (
-              <Span key={j} seg={seg} onToken={openToken} onUrl={onOpenUrl} />
+              <Span key={j} seg={seg} onToken={openToken} onUrl={onOpenUrl} accounts={accounts} />
             ))}
           </Text>
         ),
@@ -44,7 +45,17 @@ export function AgentMessage({
   );
 }
 
-function Span({ seg, onToken, onUrl }: { seg: Segment; onToken: (t: TokenRef | null) => void; onUrl: (url: string) => void }) {
+function Span({
+  seg,
+  onToken,
+  onUrl,
+  accounts,
+}: {
+  seg: Segment;
+  onToken: (t: TokenRef | null) => void;
+  onUrl: (url: string) => void;
+  accounts: Map<string, PostRef>;
+}) {
   switch (seg.kind) {
     case "ticker":
       return seg.token?.mint ? (
@@ -54,12 +65,15 @@ function Span({ seg, onToken, onUrl }: { seg: Segment; onToken: (t: TokenRef | n
       ) : (
         <Text style={s.strong}>{seg.text}</Text>
       );
-    case "handle":
+    case "handle": {
+      const account = accounts.get(seg.text.slice(1).toLowerCase());
       return (
         <Text style={s.link} onPress={() => onUrl(seg.url)} accessibilityRole="link">
           {seg.text}
+          {account?.followers != null ? <Badge followers={account.followers} verified={account.verified} /> : null}
         </Text>
       );
+    }
     case "url":
       return (
         <Text style={s.link} onPress={() => onUrl(seg.url)} accessibilityRole="link">
@@ -88,6 +102,17 @@ function Span({ seg, onToken, onUrl }: { seg: Segment; onToken: (t: TokenRef | n
     default:
       return <Text>{seg.text}</Text>;
   }
+}
+
+/** An account's size, read in a glance: <1K, 1K+, 10K+, 30K+, 50K+, 100K+, with a check when verified. */
+function Badge({ followers, verified }: { followers: number; verified?: boolean }) {
+  const tier = followerTier(followers);
+  const tone = tier.rank === 0 ? colors.muted : tier.rank <= 2 ? colors.mist : colors.ice;
+  return (
+    <View style={[s.badge, tier.rank >= 3 && s.badgeStrong]}>
+      <Text style={[s.badgeText, { color: tone }]}>{`${verified ? "✓ " : ""}${tier.label}`}</Text>
+    </View>
+  );
 }
 
 async function copyAddress(address: string) {
@@ -123,8 +148,12 @@ function TokenCard({ token, onPress }: { token: TokenRef; onPress: () => void })
       style={({ pressed }) => [s.card, pressed && { opacity: 0.7 }]}
     >
       <View style={s.cardTop}>
-        <View style={{ flexShrink: 1 }}>
-          <Text style={s.symbol}>{token.symbol}</Text>
+        {token.image ? <Image source={{ uri: token.image }} style={s.logo} /> : null}
+        <View style={{ flexShrink: 1, flexGrow: 1 }}>
+          <Text style={s.symbol}>
+            {token.symbol}
+            {token.launchpad ? <Text style={s.launchpad}>{`  ${token.launchpad}`}</Text> : null}
+          </Text>
           {token.name ? (
             <Text numberOfLines={1} style={s.name}>
               {token.name}
@@ -169,6 +198,11 @@ const s = StyleSheet.create({
   strong: { fontFamily: chatFonts.medium, color: colors.ice },
   link: { fontFamily: chatFonts.medium, color: colors.link },
   inlineIcon: { width: 13, height: 13, justifyContent: "flex-end" },
+  badge: { marginLeft: 5, paddingHorizontal: 5, paddingVertical: 1, borderRadius: 6, backgroundColor: colors.surfaceRaised, transform: [{ translateY: 2 }] },
+  badgeStrong: { backgroundColor: colors.selected },
+  badgeText: { fontFamily: fonts.numericMedium, fontSize: 10, letterSpacing: 0.2 },
+  logo: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.surfaceRaised },
+  launchpad: { fontFamily: fonts.regular, fontSize: 11, color: colors.muted },
   figure: { fontFamily: fonts.numericMedium },
   card: {
     backgroundColor: colors.surface,
