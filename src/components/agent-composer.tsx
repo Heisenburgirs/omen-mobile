@@ -78,6 +78,7 @@ export function AgentComposer({
           style={s.input}
         />
         <View style={s.tools}>
+          <View style={s.left}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Attach a document"
@@ -96,6 +97,7 @@ export function AgentComposer({
           >
             <Icon name="paste" size={19} color={colors.ice} />
           </Pressable>
+          </View>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={action === "send" ? "Send message" : action === "stop" ? "Stop listening" : "Speak to the agent"}
@@ -159,6 +161,7 @@ const s = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 8,
   },
+  left: { flexDirection: "row", alignItems: "center", gap: 2 },
   tool: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
   send: { backgroundColor: colors.ice },
   // Listening: the same white as send, so the box has one live control.
