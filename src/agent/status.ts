@@ -8,7 +8,8 @@ const handleOf = (text: string) => {
   const h = xHandles(text)[0];
   return h ? `@${h}` : "that account";
 };
-const short = (s: string, max = 28) => (s.length > max ? `${s.slice(0, max - 1).trimEnd()}…` : s);
+/** " for $PUMPE" when the query is short enough to read at a glance; nothing otherwise. */
+const about = (q: string) => (q.trim().length > 0 && q.trim().length <= 18 ? ` for ${q.trim()}` : "");
 
 /** What a tool is doing, for the user to read while it runs. */
 export function toolStatus(id: string, text: string): string {
@@ -43,11 +44,11 @@ export function toolStatus(id: string, text: string): string {
     case "x_mentions":
       return `Reading mentions of ${handleOf(text)}`;
     case "x_search":
-      return `Searching X for ${short(xSearchQuery(text))}`;
+      return `Searching X${about(xSearchQuery(text))}`;
     case "x_replies":
       return "Reading the replies";
     case "web_search":
-      return `Searching the web for ${short(webQuery(text))}`;
+      return `Searching the web${about(webQuery(text))}`;
     case "web_research":
       return "Reading up on it";
     case "chain_lookup": {

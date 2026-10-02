@@ -5,7 +5,8 @@ import { statusLine, toolStatus, writingStatus } from "../src/agent/status";
 test("a tool's status names what it is doing, with the argument it read from the message", () => {
   assert.equal(toolStatus("market", "research low caps"), "Scanning the market");
   assert.equal(toolStatus("x_posts", "latest 20 posts from @heisenburgirr"), "Reading @heisenburgirr's posts");
-  assert.match(toolStatus("x_search", "what is X saying about $PUMPE"), /^Searching X for /);
+  assert.equal(toolStatus("x_search", "what is X saying about $PUMPE"), "Searching X for $PUMPE");
+  assert.equal(toolStatus("web_search", "why did the market dump so hard this week and what happens next"), "Searching the web");
   assert.equal(toolStatus("chain_lookup", "what is in 9fJAWKQpkY93hfuZxrHfh5wEh2AV9vjkWNQfzfbziHd2"), "Looking at the wallet on chain");
   assert.equal(toolStatus("something_new", "x"), "Looking up something new");
 });
