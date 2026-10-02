@@ -300,6 +300,7 @@ export function AgentScreen({
         }) as Fetcher,
         write: channel.write,
         ...(funded ? { paid: channel.tool } : {}),
+        ...(token ? { post: (async (resource: string, body: unknown) => mobileFetch(resource, {}, token, undefined, "POST", body)) as NonNullable<Parameters<typeof runTurn>[0]["post"]> } : {}),
         agent: () => ({
           state: channel.view?.state ?? "none",
           availableUsdc: channel.view?.availableUsdc ?? 0,

@@ -1,5 +1,7 @@
 import { postsForWriter } from "./external-tools";
-import { dexRef, postRefs, refsOf, tokenRef, type MessageRefs } from "./refs";
+import { ageText, dexRef, postRefs, refsOf, tokenRef, type MessageRefs } from "./refs";
+import { callsFrom, graphOf, graphOfHandle, recordCalls, symbolGraphSummary } from "./xgraph";
+import { cashtagsIn } from "./scout";
 import type { ToolContext, ToolResult } from "./registry";
 import { xActivity, type WriterPost } from "./scout";
 import { compact, withPeaks, type TokenRow } from "./tools";
@@ -104,6 +106,39 @@ export async function tokenDossier(ctx: ToolContext, symbol: string): Promise<{ 
   }
   const x = posts.length ? xActivity(posts) : null;
   const kols = kolsOf(posts);
+
+  // The network: what was just read becomes calls; then who called this
+  // token before and their records; then the two biggest accounts' own
+  // feeds (one paid read each): what else they push and how often.
+  let network: Record<string, unknown> | null = null;
+  const dives: Record<string, unknown>[] = [];
+  if (ctx.post && posts.length) {
+    ctx.status?.(`Mapping who called $${symbol}`);
+    await recordCalls(ctx, callsFrom(posts, symbol, mint, "search"));
+    for (const k of kols.slice(0, 2)) {
+      if (!ctx.paid) break;
+      try {
+        ctx.status?.(`Reading ${k.handle}'s feed`);
+        const call = await ctx.paid("x.user_posts", { userName: k.handle.replace(/^@/, "") });
+        costMicro += call.costMicro ?? 0;
+        const feed = postsForWriter(call.data, 20) as WriterPost[];
+        await recordCalls(ctx, callsFrom(feed, undefined, undefined, "profile"));
+        const tickers = new Map<string, number>();
+        for (const p of feed) for (const s of cashtagsIn(p.text)) tickers.set(s, (tickers.get(s) ?? 0) + 1);
+        const record = await graphOfHandle(ctx, k.handle);
+        dives.push({
+          handle: k.handle,
+          followers: k.followers,
+          postsRead: feed.length,
+          tickersInFeed: [...tickers.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([s, n]) => `$${s} x${n}`),
+          ...(record ? { callsPerDay: record.callsPerDay, record: record.account, pastCalls: record.tokens.slice(0, 6) } : {}),
+        });
+      } catch {
+        // The dive is a bonus.
+      }
+    }
+    network = symbolGraphSummary(await graphOf(ctx, symbol));
+  }
   const lead = [...posts].sort((a, b) => (b.likes ?? 0) + 2 * (b.replies ?? 0) - ((a.likes ?? 0) + 2 * (a.replies ?? 0))).slice(0, 5);
 
   const sections = [
@@ -118,7 +153,7 @@ export async function tokenDossier(ctx: ToolContext, symbol: string): Promise<{ 
             liquidity: main.liquidityUsd,
             volume24h: main.volume24h,
             change24h: main.change24h,
-            ageHours: main.ageHours,
+            age: ageText(main.ageHours),
             ...(handle ? { xAccount: "@" + handle } : {}),
             ...(peak ? { peak } : {}),
           },
@@ -148,6 +183,8 @@ export async function tokenDossier(ctx: ToolContext, symbol: string): Promise<{ 
       : ctx.paid
         ? "X: nothing found for the cashtag or the contract in the last day"
         : "X: not checked (agent unfunded)",
+    network ? `network (who called it before, their records): ${compact(network, 1_400)}` : "",
+    dives.length ? `profile dives (what the biggest callers push): ${compact(dives, 1_400)}` : "",
     lead.length
       ? `lead posts: ${compact(
           lead.map((p) => ({ by: p.by, followers: p.followers, at: p.at, likes: p.likes, replies: p.replies, text: p.text.slice(0, 220), url: p.url })),

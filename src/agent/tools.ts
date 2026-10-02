@@ -1,4 +1,4 @@
-import { tokenRef, type TokenRef } from "./refs";
+import { ageText, tokenRef, type TokenRef } from "./refs";
 // What the agent can look up. Every tool is a plain function over the app's
 // own API, chosen by code from Jev's reading of the message, never by a model
 // emitting JSON. Each returns a compact text the writing model reads as data.
@@ -165,7 +165,7 @@ export async function marketScan(fetch: Fetcher, text: string, onStatus?: (line:
     marketCap: a.marketCap ?? null,
     liquidity: a.liquidity ?? null,
     volume24h: a.volume24h ?? null,
-    ageDays: days(a.createdAt),
+    age: ageText(days(a.createdAt) == null ? null : (days(a.createdAt) as number) * 24),
     ...(a.stonk?.payoutSymbol ? { pays: a.stonk.payoutSymbol, taxPct: a.stonk.taxBps != null ? a.stonk.taxBps / 100 : null } : {}),
   });
   // Every shortlisted token carries where it peaked, so a run that is already

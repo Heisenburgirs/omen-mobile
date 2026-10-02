@@ -126,6 +126,14 @@ export function postRefs(posts: { by?: string; url?: string }[]): PostRef[] {
   return out;
 }
 
+/** An age as a person says it: "40m", "6h", "3d". */
+export function ageText(hours: number | null | undefined): string | null {
+  if (hours == null || !Number.isFinite(hours)) return null;
+  if (hours < 1) return `${Math.max(1, Math.round(hours * 60))}m`;
+  if (hours < 48) return `${Math.round(hours)}h`;
+  return `${Math.round(hours / 24)}d`;
+}
+
 export const refsOf = (tokens: (TokenRef | null)[] = [], posts: PostRef[] = []): MessageRefs => ({
   tokens: tokens.filter((t): t is TokenRef => t !== null),
   posts,

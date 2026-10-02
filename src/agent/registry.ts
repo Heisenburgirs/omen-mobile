@@ -63,6 +63,8 @@ export type ToolContext = {
   status?: (line: string) => void;
   /** The other tools running this turn, so one does not buy what another already is. */
   planned?: string[];
+  /** A write to the app's API, for what the agent learns and keeps (the X network). */
+  post?: <T = unknown>(resource: string, body: unknown) => Promise<T>;
 };
 /** What a tool hands the writer, and what its paid calls cost in millionths of a USDC. */
 export type ToolResult = { data: string; args?: Record<string, string>; costMicro?: number; refs?: MessageRefs };

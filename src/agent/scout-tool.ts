@@ -1,5 +1,6 @@
 import { postsForWriter } from "./external-tools";
-import { dexRef, postRefs, refsOf, type TokenRef } from "./refs";
+import { ageText, dexRef, postRefs, refsOf, type TokenRef } from "./refs";
+import { callsFrom, graphOf, recordCalls, symbolGraphSummary } from "./xgraph";
 import type { Tool, ToolContext } from "./registry";
 import { candidatesFrom, leadPost, postIdOf, xActivity, type WriterPost } from "./scout";
 import { compact, marketScan, mentionedSymbols, peaksOf } from "./tools";
@@ -96,6 +97,14 @@ export const SCOUT: Tool = {
       }
     }
 
+    // 3b. The network remembers every post read; then who called each one before.
+    if (ctx.post) {
+      ctx.status?.("Mapping who called them");
+      await recordCalls(ctx, discovery.flatMap((p) => callsFrom([p], undefined, undefined, "discovery")));
+      for (const d of dug) await recordCalls(ctx, callsFrom(d.posts, d.symbol, undefined, "search"));
+    }
+    const networks = ctx.post ? await Promise.all(dug.map((d) => graphOf(ctx, d.symbol).then(symbolGraphSummary))) : dug.map(() => null);
+
     // 4. The chart: figures and the peak, for each.
     ctx.status?.("Checking their charts");
     const charts = await Promise.all(
@@ -132,11 +141,12 @@ export const SCOUT: Tool = {
               liquidity: main.liquidityUsd,
               volume24h: main.volume24h,
               change24h: main.change24h,
-              ageHours: main.ageHours,
+              age: ageText(main.ageHours),
               ...(main.twitter ? { xAccount: main.twitter } : {}),
             }
-          : "no Solana DEX pair found: may not be tradable yet",
+          : "no Solana DEX pair found: not tradable in the app; do not pick it",
         ...(peak ? { peak: { athMarketCap: peak.athMarketCap, fromAthPct: peak.fromAthPct, hoursSinceAth: peak.hoursSinceAth, peaked: peak.peaked } } : {}),
+        ...(networks[i] ? { network: networks[i] } : {}),
       };
     });
 
@@ -148,7 +158,7 @@ export const SCOUT: Tool = {
           candidates: report,
           discoveryPosts: discovery.length,
         },
-        14_000,
+        16_000,
       ),
       refs: refsOf(tokens, postRefs(cited)),
       costMicro: cost,

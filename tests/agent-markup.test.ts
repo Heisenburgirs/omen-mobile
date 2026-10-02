@@ -37,13 +37,18 @@ test("a bare known symbol links too, a plain word does not, and a handle without
   assert.ok(plain.includes("GAIN is a word"));
 });
 
-test("a token with figures gets one card, before the paragraph that first names it", () => {
+test("a token with figures gets one card: after a short title line, before a full paragraph", () => {
   const out = blocks("Two picks.\n\n1. $PUMPE: thin liquidity.\n\n2. $GG: no figures yet.\n\n$PUMPE again.", refs);
   const cards = out.filter((b) => b.kind === "card");
   assert.equal(cards.length, 1);
-  assert.equal(out[1]?.kind, "card");
-  assert.equal(out[2]?.kind, "paragraph");
+  assert.equal(out[1]?.kind, "paragraph");
+  assert.equal(out[2]?.kind, "card");
   assert.equal(out.filter((b) => b.kind === "paragraph").length, 4);
+  const long = blocks("$PUMPE has thin liquidity and a one-day chart, which is why the volume ratio looks like churn more than demand.", refs);
+  assert.equal(long[0]?.kind, "card");
+  const bullets = blocks("Picks:\n* $GG: nothing yet\n* $PUMPE: cooking", refs);
+  const kinds = bullets.map((b) => b.kind);
+  assert.deepEqual(kinds, ["paragraph", "paragraph", "paragraph", "card"]);
 });
 
 test("labels and refs read cleanly", () => {
@@ -74,6 +79,6 @@ test("markdown the model slips in is read, not shown, and a contract address bec
   assert.ok(addr && addr.kind === "address" && addr.address === "9fJAWKQpkY93hfuZxrHfh5wEh2AV9vjkWNQfzfbziHd2");
   assert.ok(second.segments.some((s) => s.kind === "text" && s.text.startsWith("• ")));
   assert.ok(!kinds.some((k) => k.includes("**")));
-  const third = paragraphs[2];
-  assert.ok(third && third.kind === "paragraph" && third.segments[0]?.kind === "strong" && third.segments[0].text === "What changes my mind");
+  const third = paragraphs.find((b) => b.kind === "paragraph" && b.segments[0]?.kind === "strong" && b.segments[0].text === "What changes my mind");
+  assert.ok(third, "header paragraph");
 });

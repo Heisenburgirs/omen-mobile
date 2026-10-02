@@ -108,17 +108,23 @@ export function blocks(text: string, refs: MessageRefs): Block[] {
     .filter(Boolean);
   const out: Block[] = [];
   const carded = new Set<string>();
-  for (const p of paragraphs) {
+  // A bullet list is one block per bullet, so a token's card sits by its own line.
+  const units = paragraphs.flatMap((p) => (/^• /m.test(p) ? p.split("\n").map((l) => l.trim()).filter(Boolean) : [p]));
+  for (const p of units) {
     const segs = segments(p, refs);
-    // The card leads: the figures first, then the paragraph that argues from them.
+    const cards: Block[] = [];
     for (const s of segs) {
       if (s.kind !== "ticker" || !s.token || !hasFigures(s.token)) continue;
       const key = s.token.symbol.toUpperCase();
       if (carded.has(key) || carded.size >= MAX_CARDS) continue;
       carded.add(key);
-      out.push({ kind: "card", token: s.token });
+      cards.push({ kind: "card", token: s.token });
     }
-    out.push({ kind: "paragraph", segments: segs });
+    // A short line naming the token (a bullet, a heading) is its title: the
+    // card follows it. A full paragraph argues from the figures: the card leads.
+    const title = p.length <= 90;
+    if (title) out.push({ kind: "paragraph", segments: segs }, ...cards);
+    else out.push(...cards, { kind: "paragraph", segments: segs });
   }
   return out;
 }

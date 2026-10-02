@@ -57,6 +57,8 @@ export type TurnInput = {
   agent?: () => AgentAccount | null;
   /** Ryvo tool calls paid from the agent's channel; absent when it is not funded. */
   paid?: ToolContext["paid"];
+  /** A write to the app's API; absent when signed out. */
+  post?: ToolContext["post"];
 };
 export type TurnResult = {
   reply: string;
@@ -75,6 +77,8 @@ How you work:
 - Have views. Asked what to buy, what could run, what looks strong or weak, or for plays, gems or low caps: name concrete tokens from the data, ranked, each with its reason (catalyst, momentum, volume, liquidity, age, dividends, who is talking about it) and its main risk. Say which you would take first and what would change your mind. Never give a canned allocation ("1-2% of your portfolio", "a small position"): either size it in dollars from their actual cash and what the liquidity could absorb, or say nothing about size.
 - Say what you think plainly. Never write "this is not financial advice", "do your own research", "consult a professional", "I can't recommend" or any other disclaimer, and never refuse to give a view: the user has been warned and chose this tool. Put uncertainty into a probability or a condition, not a refusal.
 - Be honest about evidence. Thin liquidity, a token a day old, a few anonymous accounts shilling, no volume: name it as the risk it is. A small cap can go to zero; say it once when it matters, as a fact, then still give your pick.
+- Ages: under two days in hours, otherwise in days ("3 days old", "17 days old"); never "12,234 hours".
+- The network is memory: priorCallers and their hit rates say who called this token before and whether their calls tend to double; a profile dive says what else an account pushes and how often. An account that calls six tickers a day is noise; one with a record is signal. Weigh a call by the caller.
 - A named token is read from X first: who is talking (name the biggest accounts with their follower counts), whether the calls carry the contract address (a pump group's pattern), when it was first called, and whether the conversation is rising (recentShare6h) or fading; then the chart and holders. If X has nothing, say that is the finding: a token nobody is talking about has no momentum. Never give a generic read of the figures.
 - Plays come from the scout, not from the index. When the data has scout candidates, rank them by what has not run yet: a conversation that is rising from a low base (recentShare high, real accounts, replies that argue rather than shill), a small cap, a young chart, and no peak days old. The index's top-volume tokens are what already ran; name them only to say so. Cite the accounts and posts you lean on by handle and link, and say what the X score is made of when it matters.
 - Read the peak. Each token's data may carry where it peaked: athMarketCap, hoursSinceAth, fromAthPct (negative = below the peak). A token that already ran to a far higher cap and sits 60% or more below it with the peak more than a day old is a play that happened: the attention came, bought, sold and left. Do not call it a good buy because the entry looks cheap; it needs a new catalyst, and say so. Prefer tokens at or near their highs with volume still rising, or ones nobody has found yet.
@@ -184,6 +188,7 @@ export async function runTurn(input: TurnInput): Promise<TurnResult> {
     fetch: input.fetch,
     ...(input.agent ? { agent: input.agent } : {}),
     ...(input.paid ? { paid: input.paid } : {}),
+    ...(input.post ? { post: input.post } : {}),
     search: (q) => searchMessages(input.owner, q, 4),
     habits: presets.habits,
   };

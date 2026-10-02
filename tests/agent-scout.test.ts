@@ -74,3 +74,16 @@ test("the dossier's X read: big accounts, calls carrying the CA, first seen", as
   assert.equal(caCalls(posts, mint), 2);
   assert.equal(firstSeen(posts), new Date(now - 5 * 3600e3).toISOString());
 });
+
+test("posts become calls: the search's symbol, or each post's own cashtags", async () => {
+  const { callsFrom } = await import("../src/agent/xgraph");
+  const { ageText } = await import("../src/agent/refs");
+  const posts = [post("@a", "$ABC and $DEF", { url: "https://x.com/a/status/111" }), post("@b", "no tags", { url: "https://x.com/b/status/222" }), post("@c", "$GHI", { url: undefined })];
+  const forSymbol = callsFrom(posts, "ABC", "9fJAWKQpkY93hfuZxrHfh5wEh2AV9vjkWNQfzfbziHd2", "search");
+  assert.deepEqual(forSymbol.map((c) => [c.postId, c.symbol, c.mint?.slice(0, 4)]), [["111", "ABC", "9fJA"], ["222", "ABC", "9fJA"]]);
+  const own = callsFrom(posts, undefined, undefined, "profile");
+  assert.deepEqual(own.map((c) => c.symbol), ["ABC", "DEF"]);
+  assert.equal(ageText(12_234), "510d");
+  assert.equal(ageText(30), "30h");
+  assert.equal(ageText(0.5), "30m");
+});
