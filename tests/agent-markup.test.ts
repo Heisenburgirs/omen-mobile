@@ -58,7 +58,6 @@ test("labels and refs read cleanly", () => {
   assert.equal(merged.posts.length, 1);
   assert.equal(merged.posts[0]?.url, "https://x.com/A/status/1");
   assert.equal(tokenRef({ symbol: "X", mint: "m", price: "0.5", marketCap: 10, ageDays: 2 })?.ageHours, 48);
-  assert.equal(dexRef({ chain: "robinhood", symbol: "HOOKR", address: "0x1", url: "https://dexscreener.com/robinhood/0x1", fdv: 19e6 })?.url, "https://dexscreener.com/robinhood/0x1");
-  assert.equal(dexRef({ chain: "solana", symbol: "HOOKED", address: "C1m", fdv: 5e6 })?.mint, "C1m");
+  assert.equal(dexRef({ symbol: "HOOKED", address: "C1m", fdv: 5e6 })?.mint, "C1m");
   assert.deepEqual(postRefs([{ by: "@t1", url: "u" }, { by: "@?" }]), [{ handle: "t1", url: "u" }]);
 });

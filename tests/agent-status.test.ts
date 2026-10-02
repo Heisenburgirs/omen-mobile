@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { chainHint } from "../src/agent/extract";
 import { statusLine, toolStatus, writingStatus } from "../src/agent/status";
 
 test("a tool's status names what it is doing, with the argument it read from the message", () => {
@@ -23,8 +22,3 @@ test("the writing step reads by the kind of answer", () => {
   assert.equal(writingStatus("chat"), "Writing");
 });
 
-test("the chain a message names lifts that chain's tokens first", () => {
-  assert.equal(chainHint("research $HOOKR on robinhood and $HOOKED on solana"), "robinhood");
-  assert.equal(chainHint("what is $HOOKED doing on solana"), "solana");
-  assert.equal(chainHint("is $PUMPE worth it"), undefined);
-});

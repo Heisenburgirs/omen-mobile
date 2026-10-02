@@ -16,7 +16,7 @@ import {
 } from "./tools";
 import { EXTERNAL_TOOLS, postsForWriter } from "./external-tools";
 import { SCOUT } from "./scout-tool";
-import { chainHint, solanaRefs } from "./extract";
+import { solanaRefs } from "./extract";
 import { dexRef, mergeRefs, postRefs, refsOf, tokenRef, type MessageRefs } from "./refs";
 import type { TokenRow } from "./tools";
 
@@ -242,7 +242,7 @@ export const TOOLS: Tool[] = [
   {
     id: "tokens",
     describe:
-      "a token the user names on any chain (Solana, Robinhood Chain, Base, Ethereum, BNB), including launches minutes old: price, FDV, liquidity, volume, age, buys and sells, its site and X; or Solana's trending and curated lists (majors, stocks, ETFs, RWAs, metals, stablecoins)",
+      "a Solana token the user names, including a launch minutes old: price, FDV, liquidity, volume, age, buys and sells, its site and X; or the trending and curated lists (majors, stocks, ETFs, RWAs, metals, stablecoins)",
     kind: "read",
     source: "omen",
     run: async (ctx) => {
@@ -253,9 +253,8 @@ export const TOOLS: Tool[] = [
       }
       const symbols = mentionedSymbols(ctx.text).slice(0, 3);
       if (symbols.length) {
-        // Two looks per symbol: Solana's index (identity, issuer, risk) and
-        // every chain's DEX pairs (where it actually trades, however new).
-        const chain = chainHint(ctx.text);
+        // Two looks per symbol: the index (identity, issuer, risk) and the
+        // DEX pairs (where it actually trades, however new).
         let xCost = 0;
         const found = await Promise.all(
           symbols.map(async (s) => {
@@ -264,15 +263,15 @@ export const TOOLS: Tool[] = [
                 .then((r) => (Array.isArray(r.data) ? r.data : []))
                 .then((rows) => withPeaks(ctx.fetch, rows))
                 .catch(() => []),
-              ctx.fetch<{ data: unknown[] }>("dex", { q: s, limit: "4", ...(chain ? { chain } : {}) }).then((r) => (Array.isArray(r.data) ? r.data : [])).catch(() => []),
+              ctx.fetch<{ data: unknown[] }>("dex", { q: s, limit: "4" }).then((r) => (Array.isArray(r.data) ? r.data : [])).catch(() => []),
             ]);
-            type DexRow = Parameters<typeof dexRef>[0] & { twitter?: string | null; address?: string; chain?: string };
+            type DexRow = Parameters<typeof dexRef>[0] & { twitter?: string | null; address?: string };
             const dexRows = anyChain as DexRow[];
             // The main contract is the one people trade; the rest are copycats.
             const main = dexRows[0];
-            const mainPeaked = main?.chain === "solana" && main.address ? await withPeaks(ctx.fetch, [{ mint: main.address }]) : [];
+            const mainPeaked = main?.address ? await withPeaks(ctx.fetch, [{ mint: main.address }]) : [];
             const refs = refsOf([...indexed.map(tokenRef), ...dexRows.map(dexRef)]);
-            if (!indexed.length && !dexRows.length) return { text: `${s}: not found on any chain's DEXes or in Solana's index`, refs, posts: [] as ReturnType<typeof postsForWriter> };
+            if (!indexed.length && !dexRows.length) return { text: `${s}: not found on any Solana DEX or in the index`, refs, posts: [] as ReturnType<typeof postsForWriter> };
             const chatter: ReturnType<typeof postsForWriter> = [];
             // Research on a named token wants X too: one search for the cashtag and
             // the project's own account (from DexScreener), unless the planner is
@@ -291,7 +290,7 @@ export const TOOLS: Tool[] = [
             }
             const text = `${s}: ${compact(
               {
-                ...(main ? { mainContract: { chain: main.chain, address: main.address, ...(handle ? { xAccount: "@" + handle } : {}), ...(mainPeaked[0]?.peak ? { peak: mainPeaked[0].peak } : {}) } } : {}),
+                ...(main ? { mainContract: { mint: main.address, ...(handle ? { xAccount: "@" + handle } : {}), ...(mainPeaked[0]?.peak ? { peak: mainPeaked[0].peak } : {}) } } : {}),
                 onDexes: dexRows,
                 solanaIndex: indexed,
                 ...(chatter.length ? { xChatter: chatter } : {}),

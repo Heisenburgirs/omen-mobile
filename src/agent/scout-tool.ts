@@ -1,5 +1,4 @@
 import { postsForWriter } from "./external-tools";
-import { chainHint } from "./extract";
 import { dexRef, postRefs, refsOf, type TokenRef } from "./refs";
 import type { Tool, ToolContext } from "./registry";
 import { candidatesFrom, leadPost, postIdOf, xActivity, type WriterPost } from "./scout";
@@ -16,7 +15,7 @@ import { compact, marketScan, mentionedSymbols, peaksOf } from "./tools";
 const SIX_HOURS = 360;
 const DAY = 1_440;
 
-type Dex = Parameters<typeof dexRef>[0] & { twitter?: string | null; address?: string; chain?: string };
+type Dex = Parameters<typeof dexRef>[0] & { twitter?: string | null; address?: string };
 
 /** The discovery searches: launch chatter now, and gem talk today. */
 const DISCOVERY = [
@@ -99,23 +98,22 @@ export const SCOUT: Tool = {
 
     // 4. The chart: figures and the peak, for each.
     ctx.status?.("Checking their charts");
-    const chain = chainHint(ctx.text) ?? "solana";
     const charts = await Promise.all(
       dug.map(async (d) => {
         const rows = await ctx
-          .fetch<{ data: Dex[] }>("dex", { q: d.symbol, limit: "2", chain })
+          .fetch<{ data: Dex[] }>("dex", { q: d.symbol, limit: "2" })
           .then((r) => (Array.isArray(r.data) ? r.data : []))
           .catch(() => [] as Dex[]);
         return rows[0] ?? null;
       }),
     );
-    const peaks = await peaksOf(ctx.fetch, charts.map((c) => (c?.chain === "solana" ? c.address : null)));
+    const peaks = await peaksOf(ctx.fetch, charts.map((c) => c?.address ?? null));
 
     const tokens: (TokenRef | null)[] = [];
     const cited: WriterPost[] = [];
     const report = dug.map((d, i) => {
       const main = charts[i];
-      const peak = main?.chain === "solana" && main.address ? peaks[main.address] : null;
+      const peak = main?.address ? peaks[main.address] : null;
       const ref = main ? dexRef(main) : { symbol: d.symbol };
       if (ref && peak) ref.peak = { athMarketCap: peak.athMarketCap, fromAthPct: peak.fromAthPct, hoursSinceAth: peak.hoursSinceAth };
       tokens.push(ref);
@@ -128,8 +126,7 @@ export const SCOUT: Tool = {
         ...(replies.has(d.symbol) ? { repliesUnderLead: (replies.get(d.symbol) ?? []).map((p) => ({ by: p.by, followers: p.followers, text: p.text.slice(0, 140) })) } : {}),
         chart: main
           ? {
-              chain: main.chain,
-              address: main.address,
+              mint: main.address,
               priceUsd: main.priceUsd,
               marketCap: main.marketCap ?? main.fdv,
               liquidity: main.liquidityUsd,
@@ -138,7 +135,7 @@ export const SCOUT: Tool = {
               ageHours: main.ageHours,
               ...(main.twitter ? { xAccount: main.twitter } : {}),
             }
-          : "no DEX pair found: may not be tradable yet, or not on this chain",
+          : "no Solana DEX pair found: may not be tradable yet",
         ...(peak ? { peak: { athMarketCap: peak.athMarketCap, fromAthPct: peak.fromAthPct, hoursSinceAth: peak.hoursSinceAth, peaked: peak.peaked } } : {}),
       };
     });

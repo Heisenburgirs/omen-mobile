@@ -25,7 +25,6 @@ export function AgentMessage({
   const parts = useMemo(() => blocks(text, refs), [text, refs]);
   const openToken = (t: TokenRef | null) => {
     if (t?.mint) onOpenAsset(t.mint);
-    else if (t?.url) onOpenUrl(t.url);
   };
   return (
     <View style={{ gap: 10 }}>
@@ -47,7 +46,7 @@ export function AgentMessage({
 function Span({ seg, onToken, onUrl }: { seg: Segment; onToken: (t: TokenRef | null) => void; onUrl: (url: string) => void }) {
   switch (seg.kind) {
     case "ticker":
-      return seg.token && (seg.token.mint || seg.token.url) ? (
+      return seg.token?.mint ? (
         <Text style={s.link} onPress={() => onToken(seg.token)} accessibilityRole="link">
           {seg.text}
         </Text>
@@ -85,8 +84,8 @@ function TokenCard({ token, onPress }: { token: TokenRef; onPress: () => void })
     { label: "Vol 24h", value: token.volume24h != null ? usd(token.volume24h, true) : "—" },
     { label: "Age", value: compactAge(token.ageHours) ?? "—" },
   ];
-  const tappable = Boolean(token.mint || token.url);
-  const ca = token.mint ?? token.address;
+  const tappable = Boolean(token.mint);
+  const ca = token.mint;
   const copy = async () => {
     if (!ca) return;
     await Clipboard.setStringAsync(ca);
@@ -102,10 +101,7 @@ function TokenCard({ token, onPress }: { token: TokenRef; onPress: () => void })
     >
       <View style={s.cardTop}>
         <View style={{ flexShrink: 1 }}>
-          <Text style={s.symbol}>
-            {token.symbol}
-            {token.chain && token.chain !== "solana" ? <Text style={s.chain}>{`  ${token.chain}`}</Text> : null}
-          </Text>
+          <Text style={s.symbol}>{token.symbol}</Text>
           {token.name ? (
             <Text numberOfLines={1} style={s.name}>
               {token.name}
@@ -161,7 +157,6 @@ const s = StyleSheet.create({
   },
   cardTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 12 },
   symbol: { fontFamily: fonts.bold, fontSize: 15, color: colors.ice },
-  chain: { fontFamily: fonts.regular, fontSize: 12, color: colors.muted },
   name: { fontFamily: fonts.regular, fontSize: 12, color: colors.muted, marginTop: 1 },
   price: { fontFamily: fonts.numericMedium, fontSize: 15, color: colors.ice },
   change: { fontFamily: fonts.numeric, fontSize: 12, marginTop: 1 },
