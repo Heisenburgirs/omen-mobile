@@ -12,6 +12,8 @@ export type TokenRef = {
   /** Another chain, from DexScreener: a link out instead of a page. */
   chain?: string;
   url?: string;
+  /** The contract address off Solana, for copying. */
+  address?: string;
   price?: number | null;
   change24h?: number | null;
   marketCap?: number | null;
@@ -110,7 +112,9 @@ export function dexRef(row: {
   return {
     symbol: row.symbol,
     ...(row.name ? { name: row.name } : {}),
-    ...(row.chain === "solana" && row.address ? { mint: row.address } : { chain: row.chain ?? "", url: row.url ?? "" }),
+    ...(row.chain === "solana" && row.address
+      ? { mint: row.address }
+      : { chain: row.chain ?? "", url: row.url ?? "", ...(row.address ? { address: row.address } : {}) }),
     price: num(row.priceUsd),
     change24h: num(row.change24h),
     marketCap: num(row.marketCap) ?? num(row.fdv),

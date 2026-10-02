@@ -37,11 +37,12 @@ test("a bare known symbol links too, a plain word does not, and a handle without
   assert.ok(plain.includes("GAIN is a word"));
 });
 
-test("a token with figures gets one card after the paragraph that first names it", () => {
+test("a token with figures gets one card, before the paragraph that first names it", () => {
   const out = blocks("Two picks.\n\n1. $PUMPE: thin liquidity.\n\n2. $GG: no figures yet.\n\n$PUMPE again.", refs);
   const cards = out.filter((b) => b.kind === "card");
   assert.equal(cards.length, 1);
-  assert.equal(out[2]?.kind, "card");
+  assert.equal(out[1]?.kind, "card");
+  assert.equal(out[2]?.kind, "paragraph");
   assert.equal(out.filter((b) => b.kind === "paragraph").length, 4);
 });
 

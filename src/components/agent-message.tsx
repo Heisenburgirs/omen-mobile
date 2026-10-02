@@ -1,8 +1,10 @@
+import * as Clipboard from "expo-clipboard";
 import React, { useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { blocks, type Segment } from "../agent/markup";
 import type { MessageRefs, TokenRef } from "../agent/refs";
 import { assetPrice, pct, usd } from "../domain/market";
+import { showToast } from "../lib/toast";
 import { chatFonts, tradingColors as colors, tradingFonts as fonts } from "../theme";
 
 // An agent reply drawn as the chat shows it: tickers open their page, X
@@ -77,16 +79,19 @@ const compactAge = (h: number | null | undefined) =>
 /** A token's figures at a glance; a tap opens its page. */
 function TokenCard({ token, onPress }: { token: TokenRef; onPress: () => void }) {
   const change = token.change24h;
-  const peak = token.peak;
-  const cells: { label: string; value: string; tone?: "up" | "down" }[] = [
+  const cells: { label: string; value: string }[] = [
     { label: "Mkt cap", value: token.marketCap != null ? usd(token.marketCap, true) : "—" },
     { label: "Liquidity", value: token.liquidity != null ? usd(token.liquidity, true) : "—" },
     { label: "Vol 24h", value: token.volume24h != null ? usd(token.volume24h, true) : "—" },
-    peak
-      ? { label: `ATH ${usd(peak.athMarketCap, true)}`, value: pct(peak.fromAthPct), tone: peak.fromAthPct < -5 ? "down" : "up" }
-      : { label: "Age", value: compactAge(token.ageHours) ?? "—" },
+    { label: "Age", value: compactAge(token.ageHours) ?? "—" },
   ];
   const tappable = Boolean(token.mint || token.url);
+  const ca = token.mint ?? token.address;
+  const copy = async () => {
+    if (!ca) return;
+    await Clipboard.setStringAsync(ca);
+    showToast("Contract address copied");
+  };
   return (
     <Pressable
       accessibilityRole={tappable ? "button" : undefined}
@@ -118,10 +123,24 @@ function TokenCard({ token, onPress }: { token: TokenRef; onPress: () => void })
         {cells.map((c) => (
           <View key={c.label} style={s.cell}>
             <Text style={s.cellLabel}>{c.label}</Text>
-            <Text style={[s.cellValue, c.tone && { color: c.tone === "up" ? colors.success : colors.error }]}>{c.value}</Text>
+            <Text style={s.cellValue}>{c.value}</Text>
           </View>
         ))}
       </View>
+      {ca ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Copy contract address"
+          hitSlop={8}
+          onPress={() => void copy()}
+          style={({ pressed }) => [s.copy, pressed && { opacity: 0.6 }]}
+        >
+          <Text style={s.copyText}>Copy CA</Text>
+          <Text numberOfLines={1} style={s.copyAddress}>
+            {`${ca.slice(0, 4)}…${ca.slice(-4)}`}
+          </Text>
+        </Pressable>
+      ) : null}
     </Pressable>
   );
 }
@@ -146,8 +165,11 @@ const s = StyleSheet.create({
   name: { fontFamily: fonts.regular, fontSize: 12, color: colors.muted, marginTop: 1 },
   price: { fontFamily: fonts.numericMedium, fontSize: 15, color: colors.ice },
   change: { fontFamily: fonts.numeric, fontSize: 12, marginTop: 1 },
-  grid: { flexDirection: "row", justifyContent: "space-between", gap: 8 },
-  cell: { flex: 1, minWidth: 0 },
+  grid: { flexDirection: "row", flexWrap: "wrap", rowGap: 8 },
+  cell: { width: "50%", minWidth: 0 },
+  copy: { flexDirection: "row", alignItems: "center", gap: 8, alignSelf: "flex-start", paddingVertical: 4 },
+  copyText: { fontFamily: fonts.medium, fontSize: 12, color: colors.link },
+  copyAddress: { fontFamily: fonts.numeric, fontSize: 12, color: colors.muted },
   cellLabel: { fontFamily: fonts.regular, fontSize: 10, color: colors.muted, letterSpacing: 0.2 },
   cellValue: { fontFamily: fonts.numericMedium, fontSize: 13, color: colors.ice, marginTop: 2 },
 });

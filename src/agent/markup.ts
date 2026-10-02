@@ -78,7 +78,7 @@ export function segments(text: string, refs: MessageRefs): Segment[] {
   return out;
 }
 
-/** The reply as blocks: paragraphs, each followed by the cards of tokens it names first. */
+/** The reply as blocks: each paragraph led by the cards of the tokens it names first. */
 export function blocks(text: string, refs: MessageRefs): Block[] {
   const paragraphs = text
     .replace(/\r\n/g, "\n")
@@ -89,7 +89,7 @@ export function blocks(text: string, refs: MessageRefs): Block[] {
   const carded = new Set<string>();
   for (const p of paragraphs) {
     const segs = segments(p, refs);
-    out.push({ kind: "paragraph", segments: segs });
+    // The card leads: the figures first, then the paragraph that argues from them.
     for (const s of segs) {
       if (s.kind !== "ticker" || !s.token || !hasFigures(s.token)) continue;
       const key = s.token.symbol.toUpperCase();
@@ -97,6 +97,7 @@ export function blocks(text: string, refs: MessageRefs): Block[] {
       carded.add(key);
       out.push({ kind: "card", token: s.token });
     }
+    out.push({ kind: "paragraph", segments: segs });
   }
   return out;
 }
