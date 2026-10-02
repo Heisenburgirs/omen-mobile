@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Image, Keyboard, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Animated, Image, Keyboard, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Icon, IconButton, m } from "../components/market-ui";
 import { AgentDrawer } from "../components/agent-drawer";
 import { OmenSheet } from "../components/omen-sheet";
@@ -34,6 +34,26 @@ import { useLatest } from "../agent/use-latest";
 import { messageSigner, type WalletProvider } from "../agent/ryvo/wallet-signer";
 import { useAgentWallet } from "../agent/agent-wallet";
 import { useRyvoChannel } from "../agent/ryvo/use-channel";
+
+/** What the agent is doing right now, breathing until the reply lands. */
+function StatusBubble({ text }: { text: string }) {
+  const pulse = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 0.35, duration: 700, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 700, useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
+  return (
+    <View style={[s.bubble, s.theirs]} accessibilityLiveRegion="polite">
+      <Animated.Text style={[s.body, { color: colors.muted, opacity: pulse }]}>{text}</Animated.Text>
+    </View>
+  );
+}
 
 /** A long press on a bubble copies its text. */
 async function copyMessage(text: string) {
@@ -179,6 +199,7 @@ export function AgentScreen({
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState<PendingAttachment[]>([]);
   const [typing, setTyping] = useState(false);
+  const [status, setStatus] = useState("");
   const [busy, setBusy] = useState<"fund" | "withdraw" | null>(null);
   // A deposit on its way in, counted in the balance from the tap so the menu
   // answers at once while the transfer and the channel settle behind it.
@@ -251,6 +272,7 @@ export function AgentScreen({
       return;
     }
     setTyping(true);
+    setStatus("Thinking");
     try {
       const token = user ? await getAccessToken() : null;
       const ask = () => runTurn({
@@ -280,6 +302,7 @@ export function AgentScreen({
           idleUsdc: idle,
         }),
         onRemembered: () => showToast("Noted for next time"),
+        onStatus: setStatus,
       });
       let result;
       try {
@@ -475,11 +498,7 @@ export function AgentScreen({
             <Text style={s.body}>Tap to unlock your agent.</Text>
           </Pressable>
         ) : null}
-        {typing ? (
-          <View style={[s.bubble, s.theirs]}>
-            <Text style={[s.body, { color: colors.muted }]}>…</Text>
-          </View>
-        ) : null}
+        {typing ? <StatusBubble text={status || "Thinking"} /> : null}
       </ScrollView>
 
       <AgentComposer

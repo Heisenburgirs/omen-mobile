@@ -53,6 +53,8 @@ export type ToolContext = {
    * channel. Absent when the agent has no balance to pay with.
    */
   paid?: (tool: string, input: Record<string, unknown>) => Promise<{ data: unknown; costMicro: number | null }>;
+  /** A few words on what the tool is doing now, shown to the user while it runs. */
+  status?: (line: string) => void;
 };
 /** What a tool hands the writer, and what its paid calls cost in millionths of a USDC. */
 export type ToolResult = { data: string; args?: Record<string, string>; costMicro?: number };
@@ -177,6 +179,7 @@ export const TOOLS: Tool[] = [
       // cashtags (top posts, last day), paid from the agent's balance.
       if (ctx.paid && isResearch(ctx.text) && scan.symbols.length) {
         try {
+          ctx.status?.("Checking what X says about them");
           const query = scan.symbols.slice(0, 4).map((s) => "$" + s).join(" OR ");
           const call = await ctx.paid("x.search", { query, sort: "top", sinceMinutes: 1_440, pages: 1 });
           return {

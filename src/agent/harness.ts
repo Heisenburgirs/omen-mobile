@@ -9,6 +9,7 @@ import { TOOLS, toolById, type AgentAccount, type ToolContext } from "./registry
 import { searchMessages, type StoredMessage } from "./store";
 import type { Fetcher } from "./tools";
 import { attachmentContext, type PendingAttachment } from "./attachments";
+import { statusLine, toolStatus, writingStatus } from "./status";
 import { isAgentBalance } from "./intent";
 export { guessIntent, type Intent } from "./intent";
 
@@ -46,6 +47,8 @@ export type TurnInput = {
   write: Writer;
   /** Called after the reply is shown if the turn added a line to USER.md. */
   onRemembered?: (line: string) => void;
+  /** The live line while the turn runs: what the agent is doing right now. */
+  onStatus?: (line: string) => void;
   /** Photos and files attached to this message. */
   attachments?: PendingAttachment[];
   /** The agent's own balance, for questions about it. */
@@ -146,6 +149,9 @@ export async function runTurn(input: TurnInput): Promise<TurnResult> {
     }
   };
 
+  const status = (line: string) => input.onStatus?.(line);
+  status("Thinking");
+
   // 1. Plan.
   const presets = await loadPresets(input.owner);
   const sig = signature(input.text);
@@ -171,15 +177,30 @@ export async function runTurn(input: TurnInput): Promise<TurnResult> {
   };
   const args: Record<string, string> = {};
   let toolCostMicro = 0;
+  // Each running tool has a line; the user sees the ones still going.
+  const running = new Map<string, string>();
+  const showRunning = () => {
+    const line = statusLine([...running.values()]);
+    if (line) status(line);
+  };
   const results = await Promise.all(
     plan.tools.map(async (id) => {
       const tool = toolById(id);
       if (!tool) return "";
       const started = Date.now();
+      running.set(id, toolStatus(id, input.text));
+      showRunning();
+      const toolCtx: ToolContext = {
+        ...ctx,
+        status: (line) => {
+          running.set(id, line);
+          showRunning();
+        },
+      };
       try {
         // A paid lookup that has not answered in 30 s is left out of the reply.
         const result = await Promise.race([
-          tool.run(ctx),
+          tool.run(toolCtx),
           new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timed out")), 30_000)),
         ]);
         Object.assign(args, result.args ?? {});
@@ -189,6 +210,8 @@ export async function runTurn(input: TurnInput): Promise<TurnResult> {
         return `${id}: unavailable (${e instanceof Error ? e.message : "error"})`;
       } finally {
         timings.push({ label: id, ms: Date.now() - started });
+        running.delete(id);
+        showRunning();
       }
     }),
   );
@@ -196,6 +219,7 @@ export async function runTurn(input: TurnInput): Promise<TurnResult> {
 
   // 3. Write, with the model the kind of answer calls for.
   const choice = MODELS[plan.tier];
+  status(writingStatus(plan.tier));
   const system = await systemPrompt(input.owner, plan.tier);
   const text = data.length ? `${input.text}\n\n[data]\n${data.join("\n")}\n[/data]` : input.text;
   // Photos go with the message itself, for the model to look at.
