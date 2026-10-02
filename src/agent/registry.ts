@@ -1,6 +1,7 @@
 import {
   compact,
   curatedListOf,
+  withPeaks,
   dividendSummary,
   dripRules,
   findAssets,
@@ -174,7 +175,7 @@ export const TOOLS: Tool[] = [
     kind: "read",
     source: "omen",
     run: async (ctx) => {
-      const scan = await marketScan(ctx.fetch, ctx.text);
+      const scan = await marketScan(ctx.fetch, ctx.text, ctx.status);
       // Research wants the crowd too: one X search over the shortlist's
       // cashtags (top posts, last day), paid from the agent's balance.
       if (ctx.paid && isResearch(ctx.text) && scan.symbols.length) {
@@ -241,7 +242,10 @@ export const TOOLS: Tool[] = [
         const found = await Promise.all(
           symbols.map(async (s) => {
             const [indexed, anyChain] = await Promise.all([
-              ctx.fetch<{ data: TokenRow[] }>("tokens", { q: s, limit: "3" }).then((r) => (Array.isArray(r.data) ? r.data : [])).catch(() => []),
+              ctx.fetch<{ data: TokenRow[] }>("tokens", { q: s, limit: "3" })
+                .then((r) => (Array.isArray(r.data) ? r.data : []))
+                .then((rows) => withPeaks(ctx.fetch, rows))
+                .catch(() => []),
               ctx.fetch<{ data: unknown[] }>("dex", { q: s, limit: "4", ...(chain ? { chain } : {}) }).then((r) => (Array.isArray(r.data) ? r.data : [])).catch(() => []),
             ]);
             if (!indexed.length && !anyChain.length) return `${s}: not found on any chain's DEXes or in Solana's index`;

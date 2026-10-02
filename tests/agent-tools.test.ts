@@ -41,3 +41,23 @@ test("guessIntent reads the obvious ones without Jev", async () => {
   assert.equal(guessIntent("tell me about $SOL"), "token");
   assert.equal(guessIntent("set up a drip into xSOL"), "drip");
 });
+
+test("the market scan carries each shortlisted token's peak, and findAssets too", async () => {
+  const { marketScan, findAssets } = await import("../src/agent/tools");
+  const calls: string[] = [];
+  const fetch = (async (resource: string, params: Record<string, string> = {}) => {
+    calls.push(resource);
+    if (resource === "assets") return { data: [{ symbol: "BACKPACK", mint: "m1", price: 0.0006, marketCap: 500_000, liquidity: 60_000, volume24h: 200_000, createdAt: new Date().toISOString() }] };
+    if (resource === "tokens") return { data: [] };
+    if (resource === "peaks") {
+      assert.equal(params.mints, "m1");
+      return { data: { m1: { athMarketCap: 3_000_000, athAt: "x", hoursSinceAth: 72, fromAthPct: -83.3, lowSinceAthMarketCap: 480_000, peaked: true } } };
+    }
+    return { data: null };
+  }) as never;
+  const scan = await marketScan(fetch, "find me some gems");
+  assert.match(scan.data, /"athMarketCap":3000000/);
+  assert.match(scan.data, /"peaked":true/);
+  const found = await findAssets(fetch, "BACKPACK");
+  assert.match(found, /"fromAthPct":-83.3/);
+});

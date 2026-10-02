@@ -60,7 +60,41 @@ export async function dripRules(fetch: Fetcher): Promise<string> {
 export async function findAssets(fetch: Fetcher, query: string): Promise<string> {
   const { data } = await fetch<Envelope<unknown[]>>("assets", { q: query.slice(0, 40) });
   const list = Array.isArray(data) ? data.slice(0, 5) : data;
-  return compact(list, 1600);
+  return compact(Array.isArray(list) ? await withPeaks(fetch, list as { mint?: string }[]) : list, 2000);
+}
+
+/**
+ * Where a token has been: its all-time-high market cap, when, and how far
+ * it sits below it now. A run whose peak is days old and 80% above the
+ * price is attention that already came and went.
+ */
+export type Peak = {
+  athMarketCap: number;
+  athAt: string;
+  hoursSinceAth: number;
+  fromAthPct: number;
+  lowSinceAthMarketCap: number;
+  peaked: boolean;
+};
+export async function peaksOf(fetch: Fetcher, mints: (string | undefined | null)[]): Promise<Record<string, Peak | null>> {
+  const unique = [...new Set(mints.filter((m): m is string => Boolean(m)))].slice(0, 24);
+  if (!unique.length) return {};
+  try {
+    const { data } = await fetch<Envelope<Record<string, Peak | null>>>("peaks", { mints: unique.join(",") });
+    return data && typeof data === "object" ? data : {};
+  } catch {
+    return {};
+  }
+}
+/** Rows with a mint gain a peak field: ATH cap, hours since, and distance below it. */
+export async function withPeaks<T extends { mint?: string | null }>(fetch: Fetcher, rows: T[]): Promise<(T & { peak?: unknown })[]> {
+  const peaks = await peaksOf(fetch, rows.map((r) => r.mint));
+  return rows.map((r) => {
+    const p = r.mint ? peaks[r.mint] : null;
+    return p
+      ? { ...r, peak: { athMarketCap: p.athMarketCap, hoursSinceAth: p.hoursSinceAth, fromAthPct: p.fromAthPct, lowSinceAthMarketCap: p.lowSinceAthMarketCap, peaked: p.peaked } }
+      : r;
+  });
 }
 
 /** One token's page: price, market fields and dividends. */
@@ -93,7 +127,7 @@ type ScanRow = {
  * volume, age, change, what it pays). "Low cap", "gems" or "under $5m"
  * narrow it by market cap; everything is kept above a little liquidity.
  */
-export async function marketScan(fetch: Fetcher, text: string): Promise<{ data: string; symbols: string[] }> {
+export async function marketScan(fetch: Fetcher, text: string, onStatus?: (line: string) => void): Promise<{ data: string; symbols: string[] }> {
   const t = text.toLowerCase();
   const under = t.match(/\bunder \$?(\d+(?:\.\d+)?)\s*(k|m)\b/);
   const capMax = under
@@ -124,7 +158,16 @@ export async function marketScan(fetch: Fetcher, text: string): Promise<{ data: 
     ageDays: days(a.createdAt),
     ...(a.stonk?.payoutSymbol ? { pays: a.stonk.payoutSymbol, taxPct: a.stonk.taxBps != null ? a.stonk.taxBps / 100 : null } : {}),
   });
-  const take = (rows: ScanRow[]) => rows.slice(0, 8).map(row);
+  // Every shortlisted token carries where it peaked, so a run that is already
+  // over reads as one.
+  onStatus?.("Checking where they peaked");
+  const shortlist = [...gainers.slice(0, 8), ...newest.slice(0, 8), ...volume.slice(0, 8)];
+  const peaks = await peaksOf(fetch, shortlist.map((a) => a.mint));
+  const take = (rows: ScanRow[]) =>
+    rows.slice(0, 8).map((a) => {
+      const p = a.mint ? peaks[a.mint] : null;
+      return p ? { ...row(a), peak: { athMarketCap: p.athMarketCap, hoursSinceAth: p.hoursSinceAth, fromAthPct: p.fromAthPct, peaked: p.peaked } } : row(a);
+    });
   const symbols = [...new Set([...gainers, ...newest, ...volume].map((a) => a.symbol).filter((s): s is string => Boolean(s)))];
   const trendingRows = trending.map((r) => ({
     symbol: r.symbol,
