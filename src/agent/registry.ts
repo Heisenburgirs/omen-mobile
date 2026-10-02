@@ -1,6 +1,8 @@
 import {
   compact,
   curatedListOf,
+  findAssetRows,
+  portfolioRows,
   withPeaks,
   dividendSummary,
   dripRules,
@@ -14,6 +16,7 @@ import {
 } from "./tools";
 import { EXTERNAL_TOOLS, postsForWriter } from "./external-tools";
 import { chainHint, solanaRefs } from "./extract";
+import { dexRef, mergeRefs, postRefs, refsOf, tokenRef, type MessageRefs } from "./refs";
 import type { TokenRow } from "./tools";
 
 // Everything the agent can look up or prepare, as one registry. Jev reads
@@ -58,7 +61,7 @@ export type ToolContext = {
   status?: (line: string) => void;
 };
 /** What a tool hands the writer, and what its paid calls cost in millionths of a USDC. */
-export type ToolResult = { data: string; args?: Record<string, string>; costMicro?: number };
+export type ToolResult = { data: string; args?: Record<string, string>; costMicro?: number; refs?: MessageRefs };
 
 export type Tool = {
   id: string;
@@ -98,7 +101,10 @@ export const TOOLS: Tool[] = [
     describe: "the user's own wallet: their current holdings, cash and total value (not the agent's balance)",
     kind: "read",
     source: "omen",
-    run: async (ctx) => ({ data: await portfolioSummary(ctx.fetch) }),
+    run: async (ctx) => {
+      const { text, holdings } = await portfolioRows(ctx.fetch);
+      return { data: text, refs: refsOf(holdings.map(tokenRef)) };
+    },
   },
   {
     id: "agent_balance",
@@ -164,8 +170,12 @@ export const TOOLS: Tool[] = [
     run: async (ctx) => {
       const symbols = mentionedSymbols(ctx.text);
       const queries = symbols.length ? symbols : [ctx.text.slice(0, 40)];
-      const found = await Promise.all(queries.map((q) => findAssets(ctx.fetch, q).then((d) => `${q}: ${d}`)));
-      return { data: found.join("\n"), args: { symbols: symbols.join(",") } };
+      const found = await Promise.all(queries.map((q) => findAssetRows(ctx.fetch, q)));
+      return {
+        data: found.map((f, i) => `${queries[i]}: ${f.text}`).join("\n"),
+        args: { symbols: symbols.join(",") },
+        refs: refsOf(found.flatMap((f) => f.rows.map(tokenRef))),
+      };
     },
   },
   {
@@ -183,15 +193,17 @@ export const TOOLS: Tool[] = [
           ctx.status?.("Checking what X says about them");
           const query = scan.symbols.slice(0, 4).map((s) => "$" + s).join(" OR ");
           const call = await ctx.paid("x.search", { query, sort: "top", sinceMinutes: 1_440, pages: 1 });
+          const chatter = postsForWriter(call.data, 12);
           return {
-            data: scan.data + "\nxChatter: " + compact({ query, posts: postsForWriter(call.data, 12) }, 3_500),
+            data: scan.data + "\nxChatter: " + compact({ query, posts: chatter }, 3_500),
             costMicro: call.costMicro ?? 0,
+            refs: refsOf(scan.refs, postRefs(chatter)),
           };
         } catch {
           // The scan stands on its own.
         }
       }
-      return { data: scan.data };
+      return { data: scan.data, refs: refsOf(scan.refs) };
     },
   },
   {
@@ -248,11 +260,12 @@ export const TOOLS: Tool[] = [
                 .catch(() => []),
               ctx.fetch<{ data: unknown[] }>("dex", { q: s, limit: "4", ...(chain ? { chain } : {}) }).then((r) => (Array.isArray(r.data) ? r.data : [])).catch(() => []),
             ]);
-            if (!indexed.length && !anyChain.length) return `${s}: not found on any chain's DEXes or in Solana's index`;
-            return `${s}: ${compact({ onDexes: anyChain, solanaIndex: indexed }, 2600)}`;
+            const refs = refsOf([...indexed.map(tokenRef), ...(anyChain as Parameters<typeof dexRef>[0][]).map(dexRef)]);
+            if (!indexed.length && !anyChain.length) return { text: `${s}: not found on any chain's DEXes or in Solana's index`, refs };
+            return { text: `${s}: ${compact({ onDexes: anyChain, solanaIndex: indexed }, 2600)}`, refs };
           }),
         );
-        return { data: found.join("\n"), args: { symbols: symbols.join(",") } };
+        return { data: found.map((f) => f.text).join("\n"), args: { symbols: symbols.join(",") }, refs: mergeRefs(...found.map((f) => f.refs)) };
       }
       const list = curatedListOf(ctx.text) ?? "trending";
       const { data } = await ctx.fetch<{ data: TokenRow[] }>("tokens", { list, limit: "25" });

@@ -1,0 +1,63 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { blocks, segments, urlLabel } from "../src/agent/markup";
+import { dexRef, mergeRefs, postRefs, tokenRef, type MessageRefs } from "../src/agent/refs";
+
+const refs: MessageRefs = {
+  tokens: [
+    { symbol: "PUMPE", name: "Pumpkin Pepe", mint: "9fJAW", price: 0.00046, change24h: 10494, marketCap: 459_887, liquidity: 63_340, volume24h: 1_291_954, ageHours: 6 },
+    { symbol: "GG", mint: "gg1", price: null, change24h: null, marketCap: null, liquidity: null, volume24h: null, ageHours: null },
+  ],
+  posts: [{ handle: "TrenchWatchX", url: "https://x.com/TrenchWatchX/status/1234" }],
+};
+
+test("a reply's tickers, handles, links and signed figures become segments", () => {
+  const segs = segments("$PUMPE is up 10,218% in a day; @TrenchWatchX reports a -55% exit. See https://x.com/TrenchWatchX/status/1234 and $ZZZ.", refs);
+  const kinds = segs.map((s) => s.kind + ":" + s.text);
+  assert.ok(kinds.includes("ticker:$PUMPE"));
+  assert.ok(kinds.includes("number:10,218%"));
+  assert.ok(kinds.includes("handle:@TrenchWatchX"));
+  assert.ok(kinds.includes("number:-55%"));
+  assert.ok(kinds.some((k) => k.startsWith("url:https://x.com/TrenchWatchX/status/1234")));
+  const unknown = segs.find((s) => s.kind === "ticker" && s.text === "$ZZZ");
+  assert.ok(unknown && unknown.kind === "ticker" && unknown.token === null);
+  const up = segs.find((s) => s.kind === "number" && s.text === "10,218%");
+  assert.ok(up && up.kind === "number" && up.direction === "up");
+  const handle = segs.find((s) => s.kind === "handle");
+  assert.ok(handle && handle.kind === "handle" && handle.url === "https://x.com/TrenchWatchX/status/1234");
+});
+
+test("a bare known symbol links too, a plain word does not, and a handle without a post opens the profile", () => {
+  const segs = segments("PUMPE and GG look alike, but GAIN is a word. Ask @someoneelse.", refs);
+  const tickers = segs.filter((s) => s.kind === "ticker").map((s) => s.text);
+  assert.deepEqual(tickers, ["PUMPE", "GG"]);
+  const handle = segs.find((s) => s.kind === "handle");
+  assert.ok(handle && handle.kind === "handle" && handle.url === "https://x.com/someoneelse");
+  const plain = segs.filter((s) => s.kind === "text").map((s) => s.text).join("");
+  assert.ok(plain.includes("GAIN is a word"));
+});
+
+test("a token with figures gets one card after the paragraph that first names it", () => {
+  const out = blocks("Two picks.\n\n1. $PUMPE: thin liquidity.\n\n2. $GG: no figures yet.\n\n$PUMPE again.", refs);
+  const cards = out.filter((b) => b.kind === "card");
+  assert.equal(cards.length, 1);
+  assert.equal(out[2]?.kind, "card");
+  assert.equal(out.filter((b) => b.kind === "paragraph").length, 4);
+});
+
+test("labels and refs read cleanly", () => {
+  assert.equal(urlLabel("https://x.com/TrenchWatchX/status/1234"), "@TrenchWatchX on X");
+  assert.equal(urlLabel("https://www.example.com/a/very/long/path/that/keeps/going/on"), "example.com/a/very/long/path/that…");
+  const merged = mergeRefs(
+    { tokens: [{ symbol: "pumpe", price: 1 }], posts: [{ handle: "a" }] },
+    { tokens: [{ symbol: "PUMPE", mint: "m", price: 2 }], posts: [{ handle: "A", url: "https://x.com/A/status/1" }] },
+  );
+  assert.equal(merged.tokens.length, 1);
+  assert.equal(merged.tokens[0]?.mint, "m");
+  assert.equal(merged.posts.length, 1);
+  assert.equal(merged.posts[0]?.url, "https://x.com/A/status/1");
+  assert.equal(tokenRef({ symbol: "X", mint: "m", price: "0.5", marketCap: 10, ageDays: 2 })?.ageHours, 48);
+  assert.equal(dexRef({ chain: "robinhood", symbol: "HOOKR", address: "0x1", url: "https://dexscreener.com/robinhood/0x1", fdv: 19e6 })?.url, "https://dexscreener.com/robinhood/0x1");
+  assert.equal(dexRef({ chain: "solana", symbol: "HOOKED", address: "C1m", fdv: 5e6 })?.mint, "C1m");
+  assert.deepEqual(postRefs([{ by: "@t1", url: "u" }, { by: "@?" }]), [{ handle: "t1", url: "u" }]);
+});

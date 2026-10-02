@@ -1,3 +1,4 @@
+import { tokenRef, type TokenRef } from "./refs";
 // What the agent can look up. Every tool is a plain function over the app's
 // own API, chosen by code from Jev's reading of the message, never by a model
 // emitting JSON. Each returns a compact text the writing model reads as data.
@@ -22,6 +23,10 @@ type Holding = {
 
 /** The user's holdings across their wallets, largest first. */
 export async function portfolioSummary(fetch: Fetcher): Promise<string> {
+  return (await portfolioRows(fetch)).text;
+}
+/** The same, with the rows for what the reply can point at. */
+export async function portfolioRows(fetch: Fetcher): Promise<{ text: string; holdings: { symbol: string; name?: string; mint?: string }[] }> {
   const { data } = await fetch<Envelope<{ holdings?: Holding[]; totalUsd?: string | number; cashUsd?: string | number }>>("portfolio");
   const holdings = (data?.holdings ?? [])
     .map((h) => ({
@@ -35,7 +40,7 @@ export async function portfolioSummary(fetch: Fetcher): Promise<string> {
     .sort((a, b) => b.valueUsd - a.valueUsd)
     .slice(0, 14);
   const total = holdings.reduce((sum, h) => sum + h.valueUsd, 0);
-  return compact({ totalUsd: Number(data?.totalUsd ?? total), holdings });
+  return { text: compact({ totalUsd: Number(data?.totalUsd ?? total), holdings }), holdings };
 }
 
 /** Where the user's dividends come from and what they have paid. */
@@ -58,9 +63,14 @@ export async function dripRules(fetch: Fetcher): Promise<string> {
 
 /** Tokens matching a name or symbol, with their market fields. */
 export async function findAssets(fetch: Fetcher, query: string): Promise<string> {
-  const { data } = await fetch<Envelope<unknown[]>>("assets", { q: query.slice(0, 40) });
-  const list = Array.isArray(data) ? data.slice(0, 5) : data;
-  return compact(Array.isArray(list) ? await withPeaks(fetch, list as { mint?: string }[]) : list, 2000);
+  return (await findAssetRows(fetch, query)).text;
+}
+export type AssetRow = { mint?: string; symbol?: string; name?: string; price?: unknown; change24h?: unknown; marketCap?: unknown; liquidity?: unknown; volume24h?: unknown; createdAt?: string | null; peak?: unknown };
+/** The matches with their peaks, as text for the writer and rows for what the reply can point at. */
+export async function findAssetRows(fetch: Fetcher, query: string): Promise<{ text: string; rows: AssetRow[] }> {
+  const { data } = await fetch<Envelope<AssetRow[]>>("assets", { q: query.slice(0, 40) });
+  const rows = Array.isArray(data) ? await withPeaks(fetch, data.slice(0, 5)) : [];
+  return { text: compact(rows, 2000), rows };
 }
 
 /**
@@ -127,7 +137,7 @@ type ScanRow = {
  * volume, age, change, what it pays). "Low cap", "gems" or "under $5m"
  * narrow it by market cap; everything is kept above a little liquidity.
  */
-export async function marketScan(fetch: Fetcher, text: string, onStatus?: (line: string) => void): Promise<{ data: string; symbols: string[] }> {
+export async function marketScan(fetch: Fetcher, text: string, onStatus?: (line: string) => void): Promise<{ data: string; symbols: string[]; refs: (TokenRef | null)[] }> {
   const t = text.toLowerCase();
   const under = t.match(/\bunder \$?(\d+(?:\.\d+)?)\s*(k|m)\b/);
   const capMax = under
@@ -186,7 +196,12 @@ export async function marketScan(fetch: Fetcher, text: string, onStatus?: (line:
   }));
   const section = (label: string, rows: unknown[], max: number) =>
     `${label} (${rows.length}): ${rows.length ? compact(rows, max) : "none matched"}`;
+  const refs = [
+    ...[...take(gainers), ...take(newest), ...take(volume)].map(tokenRef),
+    ...trending.map((r) => tokenRef({ symbol: r.symbol, name: r.name, mint: r.mint, price: r.price, change24h: r.change24h, volume24h: r.volume24h, liquidity: r.liquidity, marketCap: r.marketCap, fdv: r.fdv })),
+  ];
   return {
+    refs,
     data: [
       capMax ? `market cap at most $${capMax.toLocaleString("en-US")}, liquidity at least $5,000` : "liquidity at least $5,000",
       section("gainers24h, OMEN index", take(gainers), 3_600),

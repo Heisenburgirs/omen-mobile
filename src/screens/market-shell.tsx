@@ -584,6 +584,7 @@ export function MarketShell(props: MarketShellProps) {
                 ) : t === "Agent" ? (
                   <AgentScreen
                     hidden={hidden}
+                    onOpenAsset={(mint) => nav({ type: "asset", mint })}
                     cashUsd={(positions.data?.data.holdings ?? [])
                       .filter((h) => isCash(h.asset.mint))
                       .reduce((sum, h) => sum + Number(h.valueUsd ?? 0), 0)}

@@ -1,4 +1,5 @@
 import { open, seal } from "./identity";
+import type { MessageRefs } from "./refs";
 import { titleFrom } from "./titles";
 import type { Attachment, Conversation, StoredMessage } from "./store";
 export type { Attachment, Conversation, StoredMessage } from "./store";
@@ -154,7 +155,12 @@ async function opened(rows: StoredRow[]): Promise<StoredMessage[]> {
   for (const m of rows) {
     try {
       let attachments: Attachment[] | undefined;
-      if (m.meta) attachments = (JSON.parse(await open(m.meta)) as { attachments?: Attachment[] }).attachments;
+      let refs: MessageRefs | undefined;
+      if (m.meta) {
+        const meta = JSON.parse(await open(m.meta)) as { attachments?: Attachment[]; refs?: MessageRefs };
+        attachments = meta.attachments;
+        refs = meta.refs;
+      }
       out.push({
         id: m.id,
         conversation: m.conversation ?? LEGACY,
@@ -163,6 +169,7 @@ async function opened(rows: StoredRow[]): Promise<StoredMessage[]> {
         costMicro: m.costMicro,
         createdAt: m.createdAt,
         ...(attachments?.length ? { attachments } : {}),
+        ...(refs ? { refs } : {}),
       });
     } catch {
       // Sealed under another key; left unread.
@@ -180,16 +187,18 @@ export async function addMessage(
   text: string,
   costMicro: number | null = null,
   attachments?: Attachment[],
+  refs?: MessageRefs,
 ): Promise<StoredMessage> {
   const sealed = await seal(text);
-  const meta = attachments?.length ? await seal(JSON.stringify({ attachments })) : undefined;
+  const hasRefs = Boolean(refs && (refs.tokens.length || refs.posts.length));
+  const meta = attachments?.length || hasRefs ? await seal(JSON.stringify({ ...(attachments?.length ? { attachments } : {}), ...(hasRefs ? { refs } : {}) })) : undefined;
   const doc = read();
   const createdAt = Date.now();
   const id = doc.nextId++;
   doc.messages.push({ id, owner, conversation, role, text: sealed, costMicro, createdAt, ...(meta ? { meta } : {}) });
   if (doc.messages.length > MAX_MESSAGES) doc.messages.splice(0, doc.messages.length - MAX_MESSAGES);
   write(doc);
-  return { id, conversation, role, text, costMicro, createdAt, ...(attachments?.length ? { attachments } : {}) };
+  return { id, conversation, role, text, costMicro, createdAt, ...(attachments?.length ? { attachments } : {}), ...(hasRefs ? { refs } : {}) };
 }
 export async function searchMessages(owner: string, query: string, limit = 8): Promise<StoredMessage[]> {
   const words = query.toLowerCase().split(/\s+/).filter((w) => w.length > 2).slice(0, 6);

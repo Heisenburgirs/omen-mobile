@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Animated, Image, Keyboard, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Animated, Image, Keyboard, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { AgentMessage } from "../components/agent-message";
+import { EMPTY_REFS, type MessageRefs } from "../agent/refs";
 import { Icon, IconButton, m } from "../components/market-ui";
 import { AgentDrawer } from "../components/agent-drawer";
 import { OmenSheet } from "../components/omen-sheet";
@@ -67,12 +69,13 @@ const GREETING = "What should we trade on?";
 const MIN_DEPOSIT = 5;
 const UNFUNDED = "Fund me with USDC to get started: tap $ at the top right.";
 
-type Shown = { id: number; from: "agent" | "user"; text: string; attachments?: Attachment[] };
+type Shown = { id: number; from: "agent" | "user"; text: string; attachments?: Attachment[]; refs?: MessageRefs };
 const shown = (m: StoredMessage): Shown => ({
   id: m.id,
   from: m.role,
   text: m.text,
   ...(m.attachments ? { attachments: m.attachments } : {}),
+  ...(m.refs ? { refs: m.refs } : {}),
 });
 
 /** A USDC amount as the transfer API takes it: up to six decimals, no trailing zeros. */
@@ -103,10 +106,13 @@ async function waitConfirmed(signature: string, token: string | null, ms = 60000
 export function AgentScreen({
   hidden,
   cashUsd,
+  onOpenAsset,
 }: {
   hidden: boolean;
   /** The wallet's cash, which funding draws on. */
   cashUsd: number;
+  /** Opens a token's page, from a ticker or card in a reply. */
+  onOpenAsset: (mint: string) => void;
 }) {
   const { user, getAccessToken } = usePrivy();
   const agent = useAgentWallet();
@@ -313,7 +319,7 @@ export function AgentScreen({
         await rekey();
         result = await ask();
       }
-      const reply = await addMessage(owner, id, "agent", result.reply, result.costMicro);
+      const reply = await addMessage(owner, id, "agent", result.reply, result.costMicro, undefined, result.refs);
       history.current = [...history.current, mine, reply].slice(-80);
       setMessages((all) => [...all, shown(reply)]);
       void touchConversation(id).then(reloadConversations);
@@ -486,7 +492,18 @@ export function AgentScreen({
                 </View>
               ),
             )}
-            {message.text ? <Text style={s.body}>{message.text}</Text> : null}
+            {message.text ? (
+              message.from === "agent" ? (
+                <AgentMessage
+                  text={message.text}
+                  refs={message.refs ?? EMPTY_REFS}
+                  onOpenAsset={onOpenAsset}
+                  onOpenUrl={(url) => void Linking.openURL(url).catch(() => showToast("Couldn't open that link."))}
+                />
+              ) : (
+                <Text style={s.body}>{message.text}</Text>
+              )
+            ) : null}
           </Pressable>
         ))}
         {identity === "failed" ? (

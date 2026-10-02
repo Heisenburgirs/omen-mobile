@@ -26,6 +26,8 @@ export const tradingColors = {
   line: "#262626",
   focus: "#E6E6E6",
   success: "#46D987",
+  // Links in the agent's replies: a ticker that opens its page, a handle that opens X.
+  link: "#5B9DFF",
   // Cash: Cash App's green, brighter than the P&L green.
   cash: "#00D632",
   error: "#FF6A72",

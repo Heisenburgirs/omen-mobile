@@ -10,6 +10,7 @@ import {
   xSearchQuery,
 } from "./extract";
 import type { Tool, ToolContext, ToolResult } from "./registry";
+import { postRefs, refsOf } from "./refs";
 import { compact } from "./tools";
 
 // Lookups outside the app, bought per call through Ryvo from the agent's own
@@ -27,9 +28,14 @@ async function paid(ctx: ToolContext, tool: string, input: Record<string, unknow
   return ctx.paid(tool, input);
 }
 
-function result(data: string, calls: Paid[], args?: Record<string, string>): ToolResult {
+function result(data: string, calls: Paid[], args?: Record<string, string>, posts?: { by?: string; url?: string }[]): ToolResult {
   const costs = calls.map((c) => c.costMicro ?? 0);
-  return { data, ...(args ? { args } : {}), costMicro: costs.reduce((a, b) => a + b, 0) };
+  return {
+    data,
+    ...(args ? { args } : {}),
+    costMicro: costs.reduce((a, b) => a + b, 0),
+    ...(posts?.length ? { refs: refsOf([], postRefs(posts)) } : {}),
+  };
 }
 
 type Post = {
@@ -91,7 +97,8 @@ export const EXTERNAL_TOOLS: Tool[] = [
       if (typeof handle !== "string") return handle;
       const call = await paid(ctx, "x.user_posts", { userName: handle });
       const count = postCount(ctx.text) ?? 20;
-      return result(compact({ account: `@${handle}`, posts: posts(call.data, count) }, 9000), [call], { handle });
+      const list = posts(call.data, count);
+      return result(compact({ account: `@${handle}`, posts: list }, 9000), [call], { handle }, [{ by: `@${handle}`, url: `https://x.com/${handle}` }, ...list]);
     },
   },
   {
@@ -103,7 +110,7 @@ export const EXTERNAL_TOOLS: Tool[] = [
       const handle = needHandle(ctx);
       if (typeof handle !== "string") return handle;
       const call = await paid(ctx, "x.user", { userName: handle });
-      return result(compact(call.data, 1500), [call], { handle });
+      return result(compact(call.data, 1500), [call], { handle }, [{ by: `@${handle}`, url: `https://x.com/${handle}` }]);
     },
   },
   {
@@ -116,7 +123,8 @@ export const EXTERNAL_TOOLS: Tool[] = [
       if (typeof handle !== "string") return handle;
       const minutes = sinceMinutes(ctx.text);
       const call = await paid(ctx, "x.mentions", { userName: handle, ...(minutes ? { sinceMinutes: minutes } : {}) });
-      return result(compact({ account: `@${handle}`, mentions: posts(call.data) }, 9000), [call], { handle });
+      const mentions = posts(call.data);
+      return result(compact({ account: `@${handle}`, mentions }, 9000), [call], { handle }, mentions);
     },
   },
   {
@@ -134,7 +142,8 @@ export const EXTERNAL_TOOLS: Tool[] = [
         pages,
         ...(minutes ? { sinceMinutes: minutes } : {}),
       });
-      return result(compact({ query: (call.data as { query?: string }).query ?? query, posts: posts(call.data, 60) }, 12000), [call], { query });
+      const list = posts(call.data, 60);
+      return result(compact({ query: (call.data as { query?: string }).query ?? query, posts: list }, 12000), [call], { query }, list);
     },
   },
   {
@@ -149,7 +158,9 @@ export const EXTERNAL_TOOLS: Tool[] = [
         await paid(ctx, "x.posts", { postIds: [postId] }),
         await paid(ctx, "x.replies", { postId, sort: "likes" }),
       ];
-      return result(compact({ post: posts(original.data, 1)[0] ?? null, replies: posts(replies.data) }, 9000), [original, replies], { postId });
+      const first = posts(original.data, 1);
+      const under = posts(replies.data);
+      return result(compact({ post: first[0] ?? null, replies: under }, 9000), [original, replies], { postId }, [...first, ...under]);
     },
   },
   {

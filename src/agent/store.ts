@@ -1,5 +1,6 @@
 import * as SQLite from "expo-sqlite";
 import { open, seal } from "./identity";
+import type { MessageRefs } from "./refs";
 import { titleFrom } from "./titles";
 
 // The agent's memory on the device: a small SQLite file with a key-value
@@ -24,6 +25,8 @@ export type StoredMessage = {
   costMicro: number | null;
   createdAt: number;
   attachments?: Attachment[];
+  /** What an agent reply can point at: tokens, X accounts and posts. */
+  refs?: MessageRefs;
 };
 export type Conversation = { id: string; title: string; createdAt: number; updatedAt: number; pinned?: boolean };
 
@@ -178,9 +181,12 @@ type Row = {
 };
 async function message(r: Row): Promise<StoredMessage> {
   let attachments: Attachment[] | undefined;
+  let refs: MessageRefs | undefined;
   if (r.meta) {
     try {
-      attachments = (JSON.parse(await open(r.meta)) as { attachments?: Attachment[] }).attachments;
+      const meta = JSON.parse(await open(r.meta)) as { attachments?: Attachment[]; refs?: MessageRefs };
+      attachments = meta.attachments;
+      refs = meta.refs;
     } catch {
       attachments = undefined;
     }
@@ -193,6 +199,7 @@ async function message(r: Row): Promise<StoredMessage> {
     costMicro: r.cost_micro,
     createdAt: r.created_at,
     ...(attachments?.length ? { attachments } : {}),
+    ...(refs ? { refs } : {}),
   };
 }
 async function opened(rows: Row[]): Promise<StoredMessage[]> {
@@ -223,10 +230,12 @@ export async function addMessage(
   text: string,
   costMicro: number | null = null,
   attachments?: Attachment[],
+  refs?: MessageRefs,
 ): Promise<StoredMessage> {
   const createdAt = Date.now();
   const sealed = await seal(text);
-  const meta = attachments?.length ? await seal(JSON.stringify({ attachments })) : null;
+  const hasRefs = Boolean(refs && (refs.tokens.length || refs.posts.length));
+  const meta = attachments?.length || hasRefs ? await seal(JSON.stringify({ ...(attachments?.length ? { attachments } : {}), ...(hasRefs ? { refs } : {}) })) : null;
   const result = await (await db()).runAsync(
     "INSERT INTO messages (owner, conversation, role, text, cost_micro, created_at, meta) VALUES (?, ?, ?, ?, ?, ?, ?)",
     [owner, conversation, role, sealed, costMicro, createdAt, meta],
@@ -239,6 +248,7 @@ export async function addMessage(
     costMicro,
     createdAt,
     ...(attachments?.length ? { attachments } : {}),
+    ...(hasRefs ? { refs } : {}),
   };
 }
 /**
