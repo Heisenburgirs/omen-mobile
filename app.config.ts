@@ -79,6 +79,7 @@ const config: ExpoConfig = {
     ["expo-image-picker", { photosPermission: "OMEN attaches the photos you pick to your agent conversation.", cameraPermission: false }],
     "expo-document-picker",
     "./plugins/with-release-signing.js",
+    "./plugins/with-dark-system-bars.js",
   ],
 };
 export default config;
