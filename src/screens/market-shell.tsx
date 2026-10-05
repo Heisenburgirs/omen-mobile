@@ -941,7 +941,7 @@ function Home({ active }: { active: boolean }) {
                         ) : (
                           <>
                             {text.slice(0, dot)}
-                            <Text style={{ color: colors.muted }}>{text.slice(dot)}</Text>
+                            {text.slice(dot)}
                           </>
                         );
                       })()}
