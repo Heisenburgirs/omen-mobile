@@ -58,9 +58,9 @@ export function OmenNavigation({
       >
         <Path
           d={outline}
-          fill={colors.surface}
-          stroke={colors.line}
-          strokeWidth={0.75}
+          fill="rgba(17,25,43,0.94)"
+          stroke="rgba(255,255,255,0.12)"
+          strokeWidth={1}
         />
       </Svg>
       {OMEN_TABS.map((tab) => {
@@ -147,7 +147,10 @@ const s = StyleSheet.create({
     top: 11,
     width: Platform.OS === "web" ? 56 : 54,
     height: 50,
-    borderRadius: 14,
-    backgroundColor: colors.card,
+    borderRadius: 22,
+    backgroundColor: colors.selected,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    borderTopColor: "rgba(255,255,255,0.26)",
   },
 });

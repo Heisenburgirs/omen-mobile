@@ -8,6 +8,7 @@ import {
   View,
 } from "react-native";
 import { colors, fonts } from "../theme";
+import { Gloss } from "./gloss";
 export function Mark({
   small = false,
   large = false,
@@ -78,6 +79,7 @@ export function Button({
         focused && s.focus,
       ]}
     >
+      <Gloss light={!secondary} />
       {busy ? (
         <ActivityIndicator color={secondary ? colors.ice : colors.canvas} />
       ) : (
@@ -134,7 +136,7 @@ export const ui = StyleSheet.create({
     height: 58,
     borderWidth: 1,
     borderColor: colors.line,
-    borderRadius: 12,
+    borderRadius: 18,
     backgroundColor: colors.surface,
     color: colors.ice,
     fontFamily: fonts.regular,
@@ -160,14 +162,19 @@ const s = StyleSheet.create({
     minHeight: 56,
     paddingHorizontal: 18,
     paddingVertical: 16,
-    borderRadius: 12,
+    borderRadius: 28,
+    overflow: "hidden",
     backgroundColor: colors.ice,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "transparent",
+    borderColor: "rgba(255,255,255,0.9)",
   },
-  secondary: { backgroundColor: colors.surface, borderColor: colors.line },
+  secondary: {
+    backgroundColor: colors.surfaceRaised,
+    borderColor: "rgba(255,255,255,0.08)",
+    borderTopColor: "rgba(255,255,255,0.22)",
+  },
   buttonText: { fontFamily: fonts.bold, fontSize: 16, color: colors.canvas },
   focus: { borderColor: colors.focus },
   notice: {

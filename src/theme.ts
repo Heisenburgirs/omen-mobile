@@ -5,32 +5,34 @@ export const fonts = {
   display: "Inter_600SemiBold",
 };
 
-// OMEN's blues, as on the landing page (getomen.xyz): a royal-blue ground
-// (#030AB2 there, deepened here so figures stay readable for hours), navy
-// surfaces (#13176A), periwinkle edges (#757ACD, #8187FF) and ice text and
-// buttons (#F2F3FF, #D9E1FF). Green and red stay for gains and losses.
+// A night-navy ground under a blue glow (the brand's blue, as light rather
+// than as paint), glassy navy cards with a hairline edge, white figures and
+// soft, raised pills for the controls. Green and red stay for gains and
+// losses.
 export const tradingColors = {
-  canvas: "#0B0F66",
-  // Cards: a step above the ground, edged in a soft periwinkle line.
-  card: "#11167E",
-  cardLine: "#2A30A8",
-  surface: "#151B8C",
-  surfaceRaised: "#1D24A6",
-  /** A selected pill, tab or toggle: the brand's royal blue, lit. */
-  selected: "#2A33C9",
-  ice: "#F2F3FF",
-  mist: "#D0D3F4",
-  muted: "#A3A8E6",
-  line: "#2C32A6",
-  focus: "#D9E1FF",
-  /** The brand's periwinkle, for an accent that is not a link. */
-  accent: "#8187FF",
-  success: "#4BE29A",
+  canvas: "#060A14",
+  /** The light at the top of every screen. */
+  glow: "#1F5BFF",
+  // Cards: a step above the ground, edged in a faint cool line.
+  card: "#0D1423",
+  cardLine: "#1B2538",
+  surface: "#111A2C",
+  surfaceRaised: "#18233A",
+  /** A selected pill, tab or toggle. */
+  selected: "#22335A",
+  ice: "#F5F8FF",
+  mist: "#C6CFE4",
+  muted: "#7E8AA8",
+  line: "#1C2740",
+  focus: "#9DB8FF",
+  /** The brand's blue, for an accent that is not a link. */
+  accent: "#3D7BFF",
+  success: "#3DDC97",
   // Links in the agent's replies: a ticker that opens its page, a handle that opens X.
-  link: "#B4BBFF",
+  link: "#7FA8FF",
   // Cash: Cash App's green, brighter than the P&L green.
   cash: "#00D632",
-  error: "#FF8A90",
+  error: "#FF6B78",
 };
 // The original navy palette is retired: every screen (welcome, sign-in,
 // wallet, account setup, launch) shares the neutral trading palette, so the

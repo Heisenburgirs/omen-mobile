@@ -33,6 +33,7 @@ import {
   radius,
 } from "../theme";
 import { usd, assetPrice, pct, assetMarketSummary } from "../domain/market";
+import { Gloss } from "./gloss";
 import { CASH_MINTS, type Asset, type Holding, type Profile } from "../domain/models";
 export const m = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.canvas },
@@ -319,14 +320,17 @@ export function IconButton({
           ? "transparent"
           : selected
             ? colors.selected
-            : colors.surface,
+            : colors.surfaceRaised,
         borderWidth: quiet ? 0 : 1,
-        borderColor: selected ? colors.selected : colors.line,
+        borderColor: "rgba(255,255,255,0.08)",
+        borderTopColor: "rgba(255,255,255,0.22)",
+        overflow: "hidden",
         alignItems: "center",
         justifyContent: "center",
         opacity: pressed || disabled ? 0.55 : 1,
       })}
     >
+      {quiet ? null : <Gloss />}
       <Icon
         name={name}
         size={size ?? (quiet ? 17 : 22)}

@@ -35,7 +35,7 @@ import {
   type SheetAction,
 } from "../components/omen-sheet";
 import { WebView } from "../components/web-view";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { usePrivy } from "../lib/privy";
 import { AgentScreen } from "./agent";
 import { isAddress } from "@solana/kit";
@@ -116,6 +116,7 @@ import { periodChange, formatApr } from "../domain/market";
 import { showToast } from "../lib/toast";
 import { playSound, preloadSounds } from "../lib/sound";
 import { LinearGradient } from "expo-linear-gradient";
+import { Backdrop, Gloss, raised } from "../components/gloss";
 // The saved chart timeframe and style are ready before any token page opens.
 void loadChartPrefs();
 const assetKey = (asset: Asset) => asset.mint;
@@ -472,6 +473,7 @@ export function MarketShell(props: MarketShellProps) {
     setGate("open");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [me.data, me.isError]);
+  const safeTop = useSafeAreaInsets().top;
   const storage = "omen.hide." + props.address;
   useEffect(() => {
     void SecureStore.getItemAsync(storage).then((v) => setHidden(v === "true"));
@@ -557,6 +559,7 @@ export function MarketShell(props: MarketShellProps) {
       }}
     >
       <SafeAreaView edges={["top", "bottom"]} style={m.screen}>
+        <Backdrop />
         <View style={{ flex: 1 }}>
           <View
             style={[
@@ -614,6 +617,7 @@ export function MarketShell(props: MarketShellProps) {
                   onHidden={top ? finishClose : undefined}
                 >
                   <View style={{ flex: 1, backgroundColor: colors.canvas }}>
+                    <Backdrop shift={safeTop} />
                     {r.type !== "asset" &&
                     r.type !== "dividends" &&
                     r.type !== "onboarding" ? (
@@ -921,7 +925,20 @@ function Home({ active }: { active: boolean }) {
                   adjustsFontSizeToFit
                   style={[s.balance, { flexShrink: 1 }]}
                 >
-                  {a.hidden ? "••••" : usd(p?.totalUsd)}
+                  {a.hidden
+                    ? "••••"
+                    : (() => {
+                        const text = usd(p?.totalUsd);
+                        const dot = text.lastIndexOf(".");
+                        return dot < 0 ? (
+                          text
+                        ) : (
+                          <>
+                            {text.slice(0, dot)}
+                            <Text style={{ color: colors.muted }}>{text.slice(dot)}</Text>
+                          </>
+                        );
+                      })()}
                 </Text>
               )}
               <IconButton
@@ -978,6 +995,7 @@ function Home({ active }: { active: boolean }) {
                   { opacity: pressed ? 0.6 : 1 },
                 ]}
               >
+                <Gloss />
                 <Icon name={icon} size={20} color={colors.ice} />
               </Pressable>
             ))}
@@ -7886,12 +7904,11 @@ const s = StyleSheet.create({
     gap: 6,
   },
   moveButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.cardLine,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: colors.surfaceRaised,
+    ...raised,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -7913,8 +7930,8 @@ const s = StyleSheet.create({
   tradeBar: { flexDirection: "row", alignItems: "flex-end", gap: 10 },
   tradeButton: {
     flex: 1,
-    minHeight: 50,
-    borderRadius: 10,
+    minHeight: 52,
+    borderRadius: 26,
     alignItems: "center",
     justifyContent: "center",
   },
