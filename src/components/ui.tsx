@@ -81,7 +81,7 @@ export function Button({
     >
       <Gloss light={!secondary} />
       {busy ? (
-        <ActivityIndicator color={secondary ? colors.ice : colors.canvas} />
+        <ActivityIndicator color={colors.ice} />
       ) : (
         <Text style={[s.buttonText, secondary && { color: colors.ice }]}>
           {title}
@@ -164,18 +164,14 @@ const s = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 28,
     overflow: "hidden",
-    backgroundColor: colors.ice,
+    backgroundColor: colors.cash,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.9)",
+    borderColor: "transparent",
   },
-  secondary: {
-    backgroundColor: colors.surfaceRaised,
-    borderColor: "rgba(255,255,255,0.08)",
-    borderTopColor: "rgba(255,255,255,0.22)",
-  },
-  buttonText: { fontFamily: fonts.bold, fontSize: 16, color: colors.canvas },
+  secondary: { backgroundColor: colors.surfaceRaised },
+  buttonText: { fontFamily: fonts.bold, fontSize: 17, color: colors.ice },
   focus: { borderColor: colors.focus },
   notice: {
     fontFamily: fonts.regular,

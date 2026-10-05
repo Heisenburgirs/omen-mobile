@@ -322,8 +322,7 @@ export function IconButton({
             ? colors.selected
             : colors.surfaceRaised,
         borderWidth: quiet ? 0 : 1,
-        borderColor: "rgba(255,255,255,0.08)",
-        borderTopColor: "rgba(255,255,255,0.22)",
+        borderColor: "transparent",
         overflow: "hidden",
         alignItems: "center",
         justifyContent: "center",

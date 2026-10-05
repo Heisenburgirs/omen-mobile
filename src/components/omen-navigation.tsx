@@ -58,8 +58,8 @@ export function OmenNavigation({
       >
         <Path
           d={outline}
-          fill="rgba(17,25,43,0.94)"
-          stroke="rgba(255,255,255,0.12)"
+          fill={colors.card}
+          stroke={colors.card}
           strokeWidth={1}
         />
       </Svg>
@@ -148,9 +148,6 @@ const s = StyleSheet.create({
     width: Platform.OS === "web" ? 56 : 54,
     height: 50,
     borderRadius: 22,
-    backgroundColor: colors.selected,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    borderTopColor: "rgba(255,255,255,0.26)",
+    backgroundColor: colors.surfaceRaised,
   },
 });

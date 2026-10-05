@@ -903,8 +903,8 @@ function Home({ active }: { active: boolean }) {
             <Icon name="copy" size={16} color={colors.muted} />
           </Pressable>
         </View>
-        <View style={[m.between, { alignItems: "flex-start" }]}>
-          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+        <View style={{ gap: 18 }}>
+          <View style={{ minWidth: 0, gap: 2 }}>
             <View style={[m.row, { gap: 0 }]}>
               {!p && a.positions.isPending ? (
                 /* 32 + 5 top and bottom is the balance's 42 px line, so the
@@ -975,13 +975,13 @@ function Home({ active }: { active: boolean }) {
               )}
             </View>
           </View>
-          <View style={[m.row, { gap: 10, marginTop: 4 }]}>
+          <View style={[m.row, { gap: 10 }]}>
             {(
               [
-                ["depositTray", "Deposit assets", "receive"],
-                ["withdrawTray", "Withdraw assets", "send"],
+                ["Deposit", "Deposit assets", "receive"],
+                ["Withdraw", "Withdraw assets", "send"],
               ] as const
-            ).map(([icon, label, route]) => (
+            ).map(([title, label, route]) => (
               <Pressable
                 key={route}
                 accessibilityRole="button"
@@ -992,8 +992,7 @@ function Home({ active }: { active: boolean }) {
                   { opacity: pressed ? 0.6 : 1 },
                 ]}
               >
-                <Gloss />
-                <Icon name={icon} size={20} color={colors.ice} />
+                <Text style={s.moveText}>{title}</Text>
               </Pressable>
             ))}
           </View>
@@ -3179,7 +3178,7 @@ function AssetScreen({ mint, active }: { mint: string; active: boolean }) {
                     style={({ pressed }) => [
                       s.tradeButton,
                       {
-                        backgroundColor: colors.ice,
+                        backgroundColor: colors.cash,
                         opacity: pressed ? 0.8 : 1,
                       },
                     ]}
@@ -7887,7 +7886,13 @@ function PeopleList({
   );
 }
 const s = StyleSheet.create({
-  balanceCard: { gap: 6, paddingTop: 4, marginBottom: -16 },
+  balanceCard: {
+    gap: 6,
+    padding: 20,
+    borderRadius: 24,
+    backgroundColor: colors.card,
+    marginBottom: -4,
+  },
   currency: {
     backgroundColor: colors.surface,
     paddingHorizontal: 14,
@@ -7904,12 +7909,12 @@ const s = StyleSheet.create({
     padding: 12,
     gap: 6,
   },
+  moveText: { fontFamily: fonts.bold, fontSize: 16, color: colors.ice },
   moveButton: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    flex: 1,
+    height: 52,
+    borderRadius: 26,
     backgroundColor: colors.surfaceRaised,
-    ...raised,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -7921,10 +7926,10 @@ const s = StyleSheet.create({
   // even "$100,000.00" ran into them and leant on adjustsFontSizeToFit.
   balance: {
     fontFamily: fonts.numericBold,
-    fontSize: 32,
-    letterSpacing: -0.8,
+    fontSize: 40,
+    letterSpacing: -1,
     color: colors.ice,
-    lineHeight: 42,
+    lineHeight: 48,
     fontVariant: ["tabular-nums"],
   },
   // Closed dock: two buttons side by side.
@@ -7934,9 +7939,6 @@ const s = StyleSheet.create({
     minHeight: 52,
     borderRadius: 26,
     overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    borderTopColor: "rgba(255,255,255,0.45)",
     alignItems: "center",
     justifyContent: "center",
   },

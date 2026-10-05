@@ -44,7 +44,7 @@ export function RaisedButton({
       ]}
     >
       {busy ? (
-        <ActivityIndicator color={secondary ? colors.ice : colors.canvas} />
+        <ActivityIndicator color={colors.ice} />
       ) : (
         <>
           {icon ? <Icon name={icon} size={18} /> : null}
@@ -55,26 +55,22 @@ export function RaisedButton({
   );
 }
 const s = StyleSheet.create({
-  // The primary action is white with ink text, as on the onboarding pages.
+  // The primary action is the one green pill; the quiet one is grey.
   button: {
     minHeight: 52,
     paddingHorizontal: 18,
     paddingVertical: 10,
-    borderRadius: 12,
+    borderRadius: 26,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: colors.ice,
+    backgroundColor: colors.cash,
   },
-  secondary: {
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.cardLine,
-  },
+  secondary: { backgroundColor: colors.surfaceRaised },
   label: {
     fontFamily: fonts.bold,
-    color: colors.canvas,
+    color: colors.ice,
     fontSize: 16,
     flexShrink: 1,
     textAlign: "center",
