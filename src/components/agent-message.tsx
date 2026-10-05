@@ -196,7 +196,7 @@ function TokenCard({ token, onPress }: { token: TokenRef; onPress: () => void })
 const s = StyleSheet.create({
   body: { fontFamily: chatFonts.regular, fontSize: 16, lineHeight: 24, color: colors.ice },
   strong: { fontFamily: chatFonts.medium, color: colors.ice },
-  link: { fontFamily: chatFonts.medium, color: colors.link },
+  link: { fontFamily: chatFonts.medium, color: colors.link, textDecorationLine: "underline" },
   inlineIcon: { width: 13, height: 13, justifyContent: "flex-end" },
   badge: { marginLeft: 5, paddingHorizontal: 5, paddingVertical: 1, borderRadius: 6, backgroundColor: colors.surfaceRaised, transform: [{ translateY: 2 }] },
   badgeStrong: { backgroundColor: colors.selected },

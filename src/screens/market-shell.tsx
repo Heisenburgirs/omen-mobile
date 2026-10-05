@@ -7751,11 +7751,11 @@ const s = StyleSheet.create({
     minWidth: 60,
     paddingHorizontal: 14,
     borderRadius: 10,
-    backgroundColor: "#121212",
+    backgroundColor: colors.surface,
     alignItems: "center",
     justifyContent: "center",
   },
-  percentChipOn: { backgroundColor: "#222222" },
+  percentChipOn: { backgroundColor: colors.selected },
   // Edit profile: an underlined field, no box, so it reads like the rest of
   // the flat profile screens.
   // The fill line the dock shrinks to before closing itself.
@@ -7788,7 +7788,7 @@ const s = StyleSheet.create({
     backgroundColor: colors.card,
     borderWidth: 1,
     // Barely-there edge: the shadow and the fade beneath already separate it.
-    borderColor: "#131313",
+    borderColor: colors.cardLine,
     elevation: 10,
     shadowColor: "#000",
     shadowOpacity: 0.5,

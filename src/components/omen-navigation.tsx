@@ -94,14 +94,14 @@ export function OmenNavigation({
                 <Icon
                   name={icons[tab]!}
                   size={20}
-                  color={active ? colors.ice : "#858891"}
+                  color={active ? colors.ice : colors.muted}
                 />
               )}
             </View>
             {/* Every destination is named: a one-word label under the icon. */}
             <Text
               numberOfLines={1}
-              style={[s.label, { color: active ? colors.ice : "#858891" }]}
+              style={[s.label, { color: active ? colors.ice : colors.muted }]}
             >
               {labels[tab] ?? tab}
             </Text>

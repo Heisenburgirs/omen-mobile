@@ -95,7 +95,7 @@ const s = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  wallet: { backgroundColor: "rgba(255,255,255,0.06)", borderColor: "#3A3A3A" },
+  wallet: { backgroundColor: "rgba(255,255,255,0.06)", borderColor: "#757ACD" },
   label: { color: "#1F1F1F", fontSize: 16, fontWeight: "600" },
   walletLabel: { color: "#FFFFFF" },
   disabled: { opacity: 0.55 },
