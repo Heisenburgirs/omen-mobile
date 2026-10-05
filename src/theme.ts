@@ -11,10 +11,10 @@ export const fonts = {
 // outlined, nothing shines; size and weight carry the hierarchy.
 export const tradingColors = {
   canvas: "#000000",
-  // Tiles: one flat step above the ground. Their edge is their own colour,
-  // so a bordered panel reads as borderless.
-  card: "#171717",
-  cardLine: "#171717",
+  // No tiles: a card is the ground itself, so content sits on black and
+  // space does the grouping.
+  card: "#000000",
+  cardLine: "#000000",
   // Pills, chips and fields that sit on a tile or on the ground.
   surface: "#1F1F1F",
   surfaceRaised: "#262626",

@@ -73,14 +73,8 @@ export const m = StyleSheet.create({
     color: colors.muted,
   },
   label: { fontFamily: fonts.medium, fontSize: 13, color: colors.muted },
-  panel: {
-    backgroundColor: colors.card,
-    borderRadius: radius.panel,
-    borderWidth: 1,
-    borderColor: colors.cardLine,
-    padding: space.lg,
-    gap: space.md,
-  },
+  // A group of related rows: no tile behind it.
+  panel: { gap: space.md },
   input: {
     fontFamily: fonts.regular,
     color: colors.ice,
@@ -323,7 +317,7 @@ export function IconButton({
             ? colors.selected
             : colors.surfaceRaised,
         borderWidth: quiet ? 0 : 1,
-        borderColor: "transparent",
+        borderColor: "rgba(255,255,255,0.14)",
         overflow: "hidden",
         alignItems: "center",
         justifyContent: "center",

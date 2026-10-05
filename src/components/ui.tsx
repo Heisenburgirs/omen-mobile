@@ -8,7 +8,7 @@ import {
   View,
 } from "react-native";
 import { colors, fonts } from "../theme";
-import { Gloss } from "./gloss";
+import { BUTTON_RADIUS, Gloss, raised } from "./gloss";
 export function Mark({
   small = false,
   large = false,
@@ -159,16 +159,15 @@ const s = StyleSheet.create({
     color: colors.ice,
   },
   button: {
-    minHeight: 48,
+    minHeight: 52,
     paddingHorizontal: 32,
     paddingVertical: 8,
-    borderRadius: 28,
+    borderRadius: BUTTON_RADIUS,
     overflow: "hidden",
     backgroundColor: colors.cash,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "transparent",
+    ...raised,
   },
   secondary: { backgroundColor: colors.surfaceRaised },
   buttonText: { fontFamily: fonts.bold, fontSize: 18, color: colors.ice },

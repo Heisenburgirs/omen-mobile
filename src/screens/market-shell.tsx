@@ -116,7 +116,7 @@ import { periodChange, formatApr } from "../domain/market";
 import { showToast } from "../lib/toast";
 import { playSound, preloadSounds } from "../lib/sound";
 import { LinearGradient } from "expo-linear-gradient";
-import { Gloss, raised } from "../components/gloss";
+import { BUTTON_RADIUS, Gloss, raised } from "../components/gloss";
 // The saved chart timeframe and style are ready before any token page opens.
 void loadChartPrefs();
 const assetKey = (asset: Asset) => asset.mint;
@@ -992,6 +992,7 @@ function Home({ active }: { active: boolean }) {
                   { opacity: pressed ? 0.6 : 1 },
                 ]}
               >
+                <Gloss />
                 <Text style={s.moveText}>{title}</Text>
               </Pressable>
             ))}
@@ -2864,19 +2865,8 @@ function AssetScreen({ mint, active }: { mint: string; active: boolean }) {
                 />
               ) : null}
               {asset.stonk?.kind === "reward" || (paidByThis && Number(paidByThis.usd) > 0) ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={asset.symbol + " dividends history"}
-                  onPress={() =>
-                    a.nav({
-                      type: "dividends",
-                      mint,
-                      symbol: asset.symbol,
-                      role: "source",
-                    })
-                  }
-                  style={[m.panel, m.between]}
-                >
+                <>
+                <View style={[m.panel, m.between]}>
                   <View style={{ gap: 4, flex: 1 }}>
                     {/* What it pays and the holder tax; the day's receipts
                         under it only once there are any. */}
@@ -2932,10 +2922,12 @@ function AssetScreen({ mint, active }: { mint: string; active: boolean }) {
                       payout={asset.stonk.payoutMint}
                       payoutSymbol={asset.stonk.payoutSymbol || "rewards"}
                     />
-                  ) : (
-                    <Icon name="chevron" size={18} color={colors.muted} />
-                  )}
-                </Pressable>
+                  ) : null}
+                </View>
+                {a.guest || !a.scope ? null : (
+                  <ActivityContent address={a.scope} active={active} dividends onlyMint={mint} />
+                )}
+                </>
               ) : asset.payers?.length ? (
                 // A payout token: the tokens that pay dividends in it, as a
                 // stack of their icons; the screen behind lists them.
@@ -3187,7 +3179,7 @@ function AssetScreen({ mint, active }: { mint: string; active: boolean }) {
                     <Text
                       style={[
                         m.text,
-                        { fontFamily: fonts.bold, color: colors.canvas },
+                        { fontFamily: fonts.bold, color: colors.ice, fontSize: 17 },
                       ]}
                     >
                       Deposit
@@ -3232,7 +3224,7 @@ function AssetScreen({ mint, active }: { mint: string; active: boolean }) {
                     <Text
                       style={[
                         m.text,
-                        { fontFamily: fonts.bold, color: colors.canvas },
+                        { fontFamily: fonts.bold, color: colors.ice, fontSize: 17 },
                       ]}
                     >
                       Buy
@@ -3254,7 +3246,7 @@ function AssetScreen({ mint, active }: { mint: string; active: boolean }) {
                     <Text
                       style={[
                         m.text,
-                        { fontFamily: fonts.bold, color: colors.canvas },
+                        { fontFamily: fonts.bold, color: colors.ice, fontSize: 17 },
                       ]}
                     >
                       Sell
@@ -5472,21 +5464,17 @@ function DripSheet({ subject, onClose }: { subject: DripSubject | null; onClose:
     (pick === "swap" && other?.mint !== status.target) ||
     (pick !== "keep" && minUsd !== Math.max(floorUsd, status.minUsd ?? floorUsd));
   const valid = pick === "keep" ? status.via === "own" : pick === "stake" ? minOk : Boolean(target && target !== subject.payout) && minOk;
-  const label = saving
-    ? "Saving…"
-    : pick === "keep"
-      ? status.on
-        ? status.via === "all"
-          ? "Follows your $" + subject.payoutSymbol + " rule"
-          : "Turn off"
-        : "Keeping as $" + subject.payoutSymbol
-      : !status.on
-        ? "Turn on"
-        : changed
-          ? "Save"
-          : "On";
+  const label = saving ? "Saving…" : "Save";
+  // Nothing to write: the choice is what is already set, or "Keep" with no
+  // rule of this token's own to switch off.
+  const nothing = !changed || (pick === "keep" && status.via !== "own");
   const save = async () => {
-    if (saving || !changed || !valid) return;
+    if (saving) return;
+    if (nothing) {
+      onClose();
+      return;
+    }
+    if (!valid) return;
     setSaving(true);
     try {
       const ok = await saveDripRule(a, actions, rules, {
@@ -5654,7 +5642,7 @@ function DripSheet({ subject, onClose }: { subject: DripSubject | null; onClose:
               )
             ) : null}
             {!minOk ? <Text style={[m.muted, { color: colors.error }]}>At least {usd(floorUsd)}.</Text> : null}
-            <Button title={label} busy={saving} disabled={saving || !changed || !valid} onPress={() => void save()} />
+            <Button title={label} busy={saving} disabled={saving || (!nothing && !valid)} onPress={() => void save()} />
           </>
         )}
       </View>
@@ -7454,7 +7442,7 @@ function Settings() {
             padding: 3,
             borderWidth: 1,
             borderColor: a.hidden ? colors.ice : colors.line,
-            backgroundColor: a.hidden ? colors.ice : colors.card,
+            backgroundColor: a.hidden ? colors.ice : colors.surfaceRaised,
             alignItems: a.hidden ? "flex-end" : "flex-start",
           }}
         >
@@ -7493,7 +7481,7 @@ function Settings() {
             padding: 3,
             borderWidth: 1,
             borderColor: a.autoCompoundAll ? colors.ice : colors.line,
-            backgroundColor: a.autoCompoundAll ? colors.ice : colors.card,
+            backgroundColor: a.autoCompoundAll ? colors.ice : colors.surfaceRaised,
             alignItems: a.autoCompoundAll ? "flex-end" : "flex-start",
           }}
         >
@@ -7888,9 +7876,7 @@ function PeopleList({
 const s = StyleSheet.create({
   balanceCard: {
     gap: 6,
-    padding: 16,
-    borderRadius: 16,
-    backgroundColor: colors.card,
+    paddingTop: 4,
     marginBottom: -4,
   },
   currency: {
@@ -7912,9 +7898,10 @@ const s = StyleSheet.create({
   moveText: { fontFamily: fonts.bold, fontSize: 18, color: colors.ice },
   moveButton: {
     flex: 1,
-    height: 48,
-    borderRadius: 24,
+    height: 52,
+    borderRadius: BUTTON_RADIUS,
     backgroundColor: colors.surfaceRaised,
+    ...raised,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -7936,18 +7923,14 @@ const s = StyleSheet.create({
   tradeBar: { flexDirection: "row", alignItems: "flex-end", gap: 10 },
   tradeButton: {
     flex: 1,
-    minHeight: 48,
-    borderRadius: 24,
-    overflow: "hidden",
+    minHeight: 52,
+    borderRadius: BUTTON_RADIUS,
+    ...raised,
     alignItems: "center",
     justifyContent: "center",
   },
   // Withdrawing is the quieter of the two cash actions.
-  tradeButtonQuiet: {
-    backgroundColor: colors.surfaceRaised,
-    borderWidth: 1,
-    borderColor: colors.line,
-  },
+  tradeButtonQuiet: { backgroundColor: colors.surfaceRaised },
   // Quick amounts: dark grey tiles, the chosen one a shade lighter.
   percentChip: {
     minHeight: 36,

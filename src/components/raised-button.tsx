@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { tradingColors as colors, tradingFonts as fonts } from "../theme";
 import { Icon, type IconName } from "./market-ui";
+import { BUTTON_RADIUS, Gloss, raised } from "./gloss";
 export function RaisedButton({
   title,
   onPress,
@@ -43,6 +44,7 @@ export function RaisedButton({
         pressed && { opacity: 0.72 },
       ]}
     >
+      <Gloss />
       {busy ? (
         <ActivityIndicator color={colors.ice} />
       ) : (
@@ -57,10 +59,11 @@ export function RaisedButton({
 const s = StyleSheet.create({
   // The primary action is the one green pill; the quiet one is grey.
   button: {
-    minHeight: 48,
+    minHeight: 52,
+    ...raised,
     paddingHorizontal: 18,
     paddingVertical: 10,
-    borderRadius: 26,
+    borderRadius: BUTTON_RADIUS,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",

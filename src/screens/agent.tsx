@@ -639,7 +639,7 @@ const s = StyleSheet.create({
   bubble: { maxWidth: "86%", paddingHorizontal: 15, paddingVertical: 11, borderRadius: 20, gap: 8 },
   theirs: {
     alignSelf: "flex-start",
-    backgroundColor: colors.card,
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.cardLine,
     borderBottomLeftRadius: 6,
