@@ -35,7 +35,7 @@ import {
   type SheetAction,
 } from "../components/omen-sheet";
 import { WebView } from "../components/web-view";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { usePrivy } from "../lib/privy";
 import { AgentScreen } from "./agent";
 import { isAddress } from "@solana/kit";
@@ -116,7 +116,7 @@ import { periodChange, formatApr } from "../domain/market";
 import { showToast } from "../lib/toast";
 import { playSound, preloadSounds } from "../lib/sound";
 import { LinearGradient } from "expo-linear-gradient";
-import { Backdrop, Gloss, raised } from "../components/gloss";
+import { Gloss, raised } from "../components/gloss";
 // The saved chart timeframe and style are ready before any token page opens.
 void loadChartPrefs();
 const assetKey = (asset: Asset) => asset.mint;
@@ -473,7 +473,6 @@ export function MarketShell(props: MarketShellProps) {
     setGate("open");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [me.data, me.isError]);
-  const safeTop = useSafeAreaInsets().top;
   const storage = "omen.hide." + props.address;
   useEffect(() => {
     void SecureStore.getItemAsync(storage).then((v) => setHidden(v === "true"));
@@ -559,7 +558,6 @@ export function MarketShell(props: MarketShellProps) {
       }}
     >
       <SafeAreaView edges={["top", "bottom"]} style={m.screen}>
-        <Backdrop />
         <View style={{ flex: 1 }}>
           <View
             style={[
@@ -617,7 +615,6 @@ export function MarketShell(props: MarketShellProps) {
                   onHidden={top ? finishClose : undefined}
                 >
                   <View style={{ flex: 1, backgroundColor: colors.canvas }}>
-                    <Backdrop shift={safeTop} />
                     {r.type !== "asset" &&
                     r.type !== "dividends" &&
                     r.type !== "onboarding" ? (
