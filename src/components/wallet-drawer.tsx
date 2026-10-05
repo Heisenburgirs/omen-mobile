@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Animated, Easing, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { transition } from "../lib/motion";
 import { tradingColors as colors, tradingFonts as fonts, space } from "../theme";
 import { shortAddress } from "../lib/balance";
 import { usd } from "../domain/market";
@@ -47,8 +48,7 @@ export function WalletDrawer({
     if (visible) setMounted(true);
     Animated.timing(progress, {
       toValue: visible ? 1 : 0,
-      duration: 220,
-      easing: Easing.out(Easing.cubic),
+      ...transition(visible),
       useNativeDriver: true,
     }).start(({ finished }) => {
       if (finished && !visible) setMounted(false);

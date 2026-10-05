@@ -12,6 +12,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { transition } from "../lib/motion";
 import { tradingColors as colors, tradingFonts as fonts } from "../theme";
 import { Icon, m } from "./market-ui";
 
@@ -42,6 +43,8 @@ export function OmenSheet({
   const [mounted, setMounted] = useState(visible);
   const progress = useRef(new Animated.Value(0)).current;
   const reduced = useRef(false);
+  // How far the sheet travels: its own height once measured.
+  const [travel, setTravel] = useState(560);
   const insets = useSafeAreaInsets();
   useEffect(() => {
     void AccessibilityInfo.isReduceMotionEnabled().then((v) => {
@@ -59,8 +62,7 @@ export function OmenSheet({
     if (visible) setMounted(true);
     const animation = Animated.timing(progress, {
       toValue: visible ? 1 : 0,
-      duration: reduced.current ? 0 : visible ? 200 : 150,
-      easing: Easing.out(Easing.cubic),
+      ...transition(visible, reduced.current),
       useNativeDriver: true,
     });
     animation.start(({ finished }) => {
@@ -102,18 +104,21 @@ export function OmenSheet({
           style={{ flex: 1, justifyContent: "flex-end" }}
         >
           <Animated.View
+            onLayout={(e) => {
+              const h = Math.round(e.nativeEvent.layout.height);
+              if (h > 0 && Math.abs(h - travel) > 8) setTravel(h);
+            }}
             style={[
               s.sheet,
               {
                 maxHeight: "92%",
                 paddingBottom: Math.max(insets.bottom, 16),
                 ...(tall ? { height: "88%" } : {}),
-                opacity: progress,
                 transform: [
                   {
                     translateY: progress.interpolate({
                       inputRange: [0, 1],
-                      outputRange: [180, 0],
+                      outputRange: [travel, 0],
                     }),
                   },
                 ],

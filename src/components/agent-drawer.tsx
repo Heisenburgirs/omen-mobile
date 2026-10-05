@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Animated, Dimensions, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Icon, m } from "./market-ui";
+import { transition } from "../lib/motion";
 import { usd } from "../domain/market";
 import { tradingColors as colors, tradingFonts as fonts, chatFonts } from "../theme";
 import type { Conversation } from "../agent/store";
@@ -58,9 +59,9 @@ export function AgentDrawer({
   useEffect(() => {
     if (visible) {
       setMounted(true);
-      Animated.timing(x, { toValue: 0, duration: 200, useNativeDriver: true }).start();
+      Animated.timing(x, { toValue: 0, ...transition(true), useNativeDriver: true }).start();
     } else {
-      Animated.timing(x, { toValue: -width, duration: 170, useNativeDriver: true }).start(() => setMounted(false));
+      Animated.timing(x, { toValue: -width, ...transition(false), useNativeDriver: true }).start(() => setMounted(false));
     }
   }, [visible, width, x]);
   if (!mounted) return null;

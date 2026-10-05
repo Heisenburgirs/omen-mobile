@@ -6,6 +6,7 @@ import { getInstalledWallets } from '../../modules/omen-wallets';
 import { walletChoices, type WalletChoice } from '../lib/wallet-picker';
 import { showErrorToast } from '../lib/toast';
 import { colors, fonts } from '../theme';
+import { transition as motionFor } from '../lib/motion';
 
 type Props = { visible: boolean; selected: WalletChoice | null; onClose: () => void; onSelect: (wallet: WalletChoice) => void; dismissible?: boolean };
 export function WalletPicker({ visible, selected, onClose, onSelect, dismissible = true }: Props) {
@@ -41,14 +42,12 @@ export function WalletPicker({ visible, selected, onClose, onSelect, dismissible
     const transition = Animated.parallel([
       Animated.timing(backdropOpacity, {
         toValue: visible ? 1 : 0,
-        duration: reduceMotion ? 0 : visible ? 140 : 120,
-        easing: Easing.inOut(Easing.quad),
+        ...motionFor(visible, reduceMotion),
         useNativeDriver: true,
       }),
       Animated.timing(sheetOffset, {
         toValue: visible ? 0 : sheetHeight.current,
-        duration: reduceMotion ? 0 : visible ? 180 : 140,
-        easing: visible ? Easing.out(Easing.cubic) : Easing.in(Easing.quad),
+        ...motionFor(visible, reduceMotion),
         useNativeDriver: true,
       }),
     ]);

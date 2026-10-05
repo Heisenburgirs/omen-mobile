@@ -34,6 +34,7 @@ import {
 } from "../theme";
 import { usd, assetPrice, pct, assetMarketSummary } from "../domain/market";
 import { Gloss } from "./gloss";
+import { transition } from "../lib/motion";
 import { CASH_MINTS, type Asset, type Holding, type Profile } from "../domain/models";
 export const m = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.canvas },
@@ -564,11 +565,9 @@ export function SkeletonTiles({
             width,
             height: 76,
             padding: 12,
+            backgroundColor: "#111111",
             gap: 6,
             borderRadius: 12,
-            borderWidth: 1,
-            borderColor: colors.cardLine,
-            backgroundColor: colors.card,
           }}
         >
           <View style={[m.row, { gap: 6, height: 20 }]}>
@@ -909,16 +908,7 @@ export function CashRow({
   hidden?: boolean;
   onPress: () => void;
 }) {
-  const detail = parts.length
-    ? parts
-        .map(
-          (p) =>
-            p.quantity.toLocaleString("en-US", { maximumFractionDigits: 2 }) +
-            " " +
-            p.symbol,
-        )
-        .join(" · ")
-    : Object.values(CASH_MINTS).join(", ");
+  const detail = "Available to spend";
   return (
     <Pressable
       accessibilityRole="button"
@@ -969,7 +959,7 @@ export function CashRow({
  * every profile: the picked tones went with the picker (2026-09-19). The
  * stored `avatar` field is kept but no longer read.
  */
-export const avatarColor = (_avatar?: string | null) => colors.card;
+export const avatarColor = (_avatar?: string | null) => colors.surfaceRaised;
 export function PersonRow({
   profile,
   onPress,
@@ -1285,7 +1275,7 @@ export function SlideToTrade({
       style={{
         height: 52,
         borderRadius: 26,
-        backgroundColor: colors.card,
+        backgroundColor: colors.surface,
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
@@ -1372,8 +1362,7 @@ export function ScreenTransition({
   useEffect(() => {
     const motion = Animated.timing(progress, {
       toValue: visible ? 1 : 0,
-      duration: visible ? 240 : 190,
-      easing: visible ? Easing.out(Easing.cubic) : Easing.in(Easing.cubic),
+      ...transition(visible),
       useNativeDriver: true,
     });
     motion.start(({ finished }) => {

@@ -117,6 +117,7 @@ import { showToast } from "../lib/toast";
 import { playSound, preloadSounds } from "../lib/sound";
 import { LinearGradient } from "expo-linear-gradient";
 import { BUTTON_RADIUS, Gloss, raised, raisedQuiet } from "../components/gloss";
+import { motion } from "../lib/motion";
 import { inviteMessage, type AgentCredits } from "../agent/credits";
 // The saved chart timeframe and style are ready before any token page opens.
 void loadChartPrefs();
@@ -909,21 +910,22 @@ function Home({ active }: { active: boolean }) {
             <Icon name="copy" size={16} color={colors.muted} />
           </Pressable>
           <View style={{ flex: 1 }} />
-          <IconButton name="invite" label="Invite friends" quiet size={22} onPress={() => setInviteOpen(true)} />
+          <View style={{ marginRight: -11 }}>
+            <IconButton name="invite" label="Invite friends" quiet size={22} onPress={() => setInviteOpen(true)} />
+          </View>
         </View>
         <InviteSheet visible={inviteOpen} onClose={() => setInviteOpen(false)} />
-        <View style={[m.between, { alignItems: "center" }]}>
+        <View style={[m.between, { alignItems: "flex-start" }]}>
           <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
             <View style={[m.row, { gap: 0 }]}>
               {!p && a.positions.isPending ? (
-                /* 32 + 5 top and bottom is the balance's 42 px line, so the
-                   figure lands where the placeholder sat; 150 wide stops it
-                   reaching the deposit and withdraw buttons. */
+                /* 36 + 6 top and bottom is the balance's 48 px line, so the
+                   figure lands where the placeholder sat. */
                 <Skeleton
-                  height={32}
+                  height={36}
                   width={150}
                   radius={10}
-                  style={{ marginVertical: 5 }}
+                  style={{ marginVertical: 6 }}
                 />
               ) : (
                 <Text
@@ -984,7 +986,7 @@ function Home({ active }: { active: boolean }) {
               )}
             </View>
           </View>
-          <View style={[m.row, { gap: 16 }]}>
+          <View style={[m.row, { gap: 16, marginTop: 1 }]}>
             {(
               [["Deposit", "Deposit assets", "receive"]] as const
             ).map(([title, label, route]) => (
@@ -2258,18 +2260,18 @@ function AssetScreen({ mint, active }: { mint: string; active: boolean }) {
     setResult(null);
     setDockOpen(true);
     dockRise.setValue(reduceMotion ? 1 : 0);
-    const duration = reduceMotion ? 0 : 160;
+    const duration = reduceMotion ? 0 : motion.enter;
     Animated.parallel([
       Animated.timing(dockRise, {
         toValue: 1,
         duration,
-        easing: Easing.out(Easing.cubic),
+        easing: motion.easeOut,
         useNativeDriver: true,
       }),
       Animated.timing(dockInset, {
         toValue: 300,
         duration,
-        easing: Easing.out(Easing.cubic),
+        easing: motion.easeOut,
         useNativeDriver: false,
       }),
     ]).start();
@@ -2300,10 +2302,8 @@ function AssetScreen({ mint, active }: { mint: string; active: boolean }) {
     // A fill card leaving after its message should drift away, not snap:
     // longer than the open, eased at both ends, the buttons fading in
     // under it at the same pace.
-    const duration = reduceMotion ? 0 : result ? 320 : 180;
-    const easing = result
-      ? Easing.inOut(Easing.cubic)
-      : Easing.out(Easing.cubic);
+    const duration = reduceMotion ? 0 : result ? 320 : motion.exit;
+    const easing = result ? Easing.inOut(Easing.cubic) : motion.easeIn;
     Animated.parallel([
       Animated.timing(keyboardRise, {
         toValue: 0,
@@ -2643,7 +2643,7 @@ function AssetScreen({ mint, active }: { mint: string; active: boolean }) {
             {/* The two round targets overlap their padding so the glyphs
               sit close, as one pair of actions. */}
             <View
-              style={{ flexDirection: "row", marginLeft: -6, marginRight: -6 }}
+              style={{ flexDirection: "row", marginLeft: -6, marginRight: -11 }}
             >
               <IconButton
                 name="share"
@@ -2921,7 +2921,9 @@ function AssetScreen({ mint, active }: { mint: string; active: boolean }) {
                         Paid to holders automatically
                       </Text>
                     ) : sources.isPending && holding ? (
-                      <Skeleton height={12} width={120} />
+                      <View style={{ height: 18, justifyContent: "center" }}>
+                        <Skeleton height={12} width={120} />
+                      </View>
                     ) : Number(paidByThis?.usd24h ?? 0) > 0 ? (
                       <Text
                         style={[
@@ -2931,7 +2933,9 @@ function AssetScreen({ mint, active }: { mint: string; active: boolean }) {
                       >
                         Received {a.hidden ? "••••" : usd(paidByThis?.usd24h)} today
                       </Text>
-                    ) : null}
+                    ) : (
+                      <Text style={[m.muted, { fontSize: 13, lineHeight: 18 }]}>Nothing received today</Text>
+                    )}
                   </View>
                   {/* What its dividends do, as a pill that changes it in one
                       sheet; the rest of the card opens the history. */}
@@ -4670,13 +4674,14 @@ function ActivityContent({
           <ActivityRows rows={rows} />
         )
       ) : (
-        <Empty
-          title={dividends ? "No dividends yet" : "No activity to show"}
-          plain
-        />
+        onlyMint ? (
+          <Text style={[m.muted, { paddingVertical: 8 }]}>No dividends from this token yet.</Text>
+        ) : (
+          <Empty title={dividends ? "No dividends yet" : "No activity to show"} plain />
+        )
       )}
       {dividends ? (
-        rows.length > shown || (next && next !== cursor) ? (
+        rows.length > shown || (next && next !== cursor && (rows.length > 0 || !onlyMint)) ? (
           <Pressable
             accessibilityRole="button"
             onPress={() => {
@@ -8087,10 +8092,8 @@ const s = StyleSheet.create({
     justifyContent: "center",
   },
   assetTile: {
-    backgroundColor: colors.card,
+    backgroundColor: "#111111",
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.cardLine,
     padding: 12,
     gap: 6,
   },
@@ -8132,11 +8135,11 @@ const s = StyleSheet.create({
   tradeButtonQuiet: raisedQuiet,
   // Quick amounts: dark grey tiles, the chosen one a shade lighter.
   percentChip: {
-    minHeight: 36,
-    minWidth: 60,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-    backgroundColor: colors.surface,
+    flex: 1,
+    minHeight: 40,
+    paddingHorizontal: 8,
+    borderRadius: 12,
+    backgroundColor: colors.surfaceRaised,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -8161,8 +8164,8 @@ const s = StyleSheet.create({
   },
   tradeDockWrap: {
     position: "absolute",
-    left: space.lg,
-    right: space.lg,
+    left: space.edge,
+    right: space.edge,
     bottom: space.lg,
   },
   tradeDock: {
@@ -8170,10 +8173,9 @@ const s = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 22,
-    backgroundColor: colors.card,
+    backgroundColor: "#171717",
     borderWidth: 1,
-    // Barely-there edge: the shadow and the fade beneath already separate it.
-    borderColor: colors.cardLine,
+    borderColor: "rgba(255,255,255,0.06)",
     elevation: 10,
     shadowColor: "#000",
     shadowOpacity: 0.5,
@@ -8232,7 +8234,7 @@ const s = StyleSheet.create({
     paddingLeft: 10,
     paddingRight: 12,
     borderRadius: radius.pill,
-    backgroundColor: colors.card,
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.line,
   },
@@ -8241,7 +8243,7 @@ const s = StyleSheet.create({
     flex: 1,
     minHeight: 54,
     borderRadius: 14,
-    backgroundColor: colors.card,
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.cardLine,
     alignItems: "center",
@@ -8265,7 +8267,7 @@ const s = StyleSheet.create({
     alignSelf: "stretch",
     minHeight: 52,
     borderRadius: radius.panel,
-    backgroundColor: colors.card,
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.cardLine,
     alignItems: "center",
@@ -8279,7 +8281,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 0,
     borderRadius: 12,
-    backgroundColor: colors.card,
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.cardLine,
     color: colors.ice,
@@ -8290,7 +8292,7 @@ const s = StyleSheet.create({
     minHeight: 32,
     paddingHorizontal: 12,
     borderRadius: 8,
-    backgroundColor: colors.card,
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.cardLine,
     alignItems: "center",
@@ -8371,7 +8373,7 @@ const s = StyleSheet.create({
     paddingLeft: 16,
     paddingRight: 14,
     borderRadius: 14,
-    backgroundColor: colors.card,
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.cardLine,
   },
@@ -8389,7 +8391,7 @@ const s = StyleSheet.create({
     flex: 1,
     minHeight: 46,
     borderRadius: 12,
-    backgroundColor: colors.card,
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.cardLine,
     alignItems: "center",
@@ -8416,7 +8418,8 @@ const s = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    paddingHorizontal: 24,
+    paddingLeft: space.edge - 12,
+    paddingRight: space.edge,
     paddingTop: 8,
     paddingBottom: 12,
     minHeight: 64,
