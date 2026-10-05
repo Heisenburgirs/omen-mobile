@@ -3187,6 +3187,7 @@ function AssetScreen({ mint, active }: { mint: string; active: boolean }) {
                       },
                     ]}
                   >
+                    <Gloss />
                     <Text
                       style={[
                         m.text,
@@ -3206,6 +3207,7 @@ function AssetScreen({ mint, active }: { mint: string; active: boolean }) {
                       { opacity: pressed ? 0.8 : 1 },
                     ]}
                   >
+                    <Gloss />
                     <Text
                       style={[
                         m.text,
@@ -3230,6 +3232,7 @@ function AssetScreen({ mint, active }: { mint: string; active: boolean }) {
                       },
                     ]}
                   >
+                    <Gloss />
                     <Text
                       style={[
                         m.text,
@@ -3251,6 +3254,7 @@ function AssetScreen({ mint, active }: { mint: string; active: boolean }) {
                       },
                     ]}
                   >
+                    <Gloss />
                     <Text
                       style={[
                         m.text,
@@ -7932,6 +7936,10 @@ const s = StyleSheet.create({
     flex: 1,
     minHeight: 52,
     borderRadius: 26,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    borderTopColor: "rgba(255,255,255,0.45)",
     alignItems: "center",
     justifyContent: "center",
   },

@@ -1,5 +1,5 @@
 import React from "react";
-import { StyleSheet, useWindowDimensions, type ViewStyle } from "react-native";
+import { StyleSheet, type ViewStyle } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import Svg, { Defs, RadialGradient, Rect, Stop } from "react-native-svg";
 import { tradingColors as colors } from "../theme";
@@ -41,20 +41,19 @@ const GLOW_HEIGHT = 460;
  * the one behind the status bar.
  */
 export function Backdrop({ shift = 0 }: { shift?: number }) {
-  const { width } = useWindowDimensions();
   return (
     <Svg
       pointerEvents="none"
       accessible={false}
-      width={width}
+      width="100%"
       height={GLOW_HEIGHT}
-      style={{ position: "absolute", top: 0, left: 0 }}
+      style={{ position: "absolute", top: 0, left: 0, right: 0 }}
     >
       <Defs>
         <RadialGradient
           id="glow"
           gradientUnits="userSpaceOnUse"
-          cx={width / 2}
+          cx="50%"
           cy={-60 - shift}
           r={GLOW_HEIGHT + 40}
         >
@@ -63,7 +62,7 @@ export function Backdrop({ shift = 0 }: { shift?: number }) {
           <Stop offset="1" stopColor={colors.glow} stopOpacity={0} />
         </RadialGradient>
       </Defs>
-      <Rect x={0} y={0} width={width} height={GLOW_HEIGHT} fill="url(#glow)" />
+      <Rect x={0} y={0} width="100%" height={GLOW_HEIGHT} fill="url(#glow)" />
     </Svg>
   );
 }
