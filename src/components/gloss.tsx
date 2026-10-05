@@ -10,18 +10,20 @@ export function Gloss(_: { light?: boolean }) {
   return (
     <LinearGradient
       pointerEvents="none"
-      colors={["rgba(255,255,255,0.07)", "rgba(255,255,255,0)", "rgba(0,0,0,0.07)"]}
+      colors={["rgba(255,255,255,0.05)", "rgba(255,255,255,0)", "rgba(0,0,0,0.05)"]}
       locations={[0, 0.5, 1]}
       style={StyleSheet.absoluteFill}
     />
   );
 }
 
-/** A button's rim: a hairline lighter than its fill, whatever the fill is. */
+/** A button's depth: lit along the top edge, shaded along the foot; no outline at the sides. */
 export const raised: ViewStyle = {
   overflow: "hidden",
-  borderWidth: 1.5,
-  borderColor: "rgba(255,255,255,0.18)",
+  borderTopWidth: 1,
+  borderTopColor: "rgba(255,255,255,0.16)",
+  borderBottomWidth: 2.5,
+  borderBottomColor: "rgba(0,0,0,0.32)",
 };
 /** Buttons are rounded rectangles, not pills. */
 export const BUTTON_RADIUS = 16;

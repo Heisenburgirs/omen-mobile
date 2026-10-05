@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import { tradingColors as colors, tradingFonts as fonts } from "../theme";
 import { showToast } from "../lib/toast";
 import { shortAddress } from "../lib/balance";
 import { usd } from "../domain/market";
 import { errorMessage } from "../lib/chain-actions";
 import type { WalletEntry } from "./wallet-drawer";
-import { Field, m } from "./market-ui";
+import { Field, Icon, m } from "./market-ui";
 import { OmenSheet } from "./omen-sheet";
 import { RaisedButton } from "./raised-button";
 
@@ -108,11 +109,21 @@ export function WalletsSection({
             <Text style={s.name} numberOfLines={1}>
               {walletName(w, i)}
             </Text>
-            <Text style={[m.muted, { fontFamily: fonts.numericMedium }]}>{shortAddress(w.address)}</Text>
+            <Text style={[m.muted, { fontFamily: fonts.numericMedium }]}>{"Solana · " + shortAddress(w.address)}</Text>
           </View>
+          <View style={{ flex: 1 }} />
           <Text style={[m.text, { fontFamily: fonts.numericMedium, fontSize: 15 }]}>
             {hidden ? "••••" : w.totalUsd == null ? "—" : usd(w.totalUsd)}
           </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={"Copy the address of " + walletName(w, i)}
+            hitSlop={10}
+            onPress={() => void Clipboard.setStringAsync(w.address).then(() => showToast("Address copied"))}
+            style={({ pressed }) => ({ paddingLeft: 12, minHeight: 40, justifyContent: "center", opacity: pressed ? 0.5 : 1 })}
+          >
+            <Icon name="copy" size={16} color={colors.muted} />
+          </Pressable>
         </Pressable>
       ))}
       <View style={{ paddingTop: 6 }}>

@@ -117,6 +117,7 @@ import { showToast } from "../lib/toast";
 import { playSound, preloadSounds } from "../lib/sound";
 import { LinearGradient } from "expo-linear-gradient";
 import { BUTTON_RADIUS, Gloss, raised } from "../components/gloss";
+import { inviteMessage, type AgentCredits } from "../agent/credits";
 // The saved chart timeframe and style are ready before any token page opens.
 void loadChartPrefs();
 const assetKey = (asset: Asset) => asset.mint;
@@ -473,12 +474,14 @@ export function MarketShell(props: MarketShellProps) {
     setGate("open");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [me.data, me.isError]);
+  const backGuard = useRef<(() => boolean) | null>(null);
   const storage = "omen.hide." + props.address;
   useEffect(() => {
     void SecureStore.getItemAsync(storage).then((v) => setHidden(v === "true"));
   }, [storage]);
   useEffect(() => {
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (backGuard.current?.()) return true;
       if (routes.length) {
         back();
         return true;
@@ -551,6 +554,7 @@ export function MarketShell(props: MarketShellProps) {
         openDrip: (subject: DripSubject) => (guest ? askSignIn() : setDripSubject(subject)),
         autoCompoundAll: autoAll,
         setAutoCompoundAll,
+        backGuard,
         openLink: (url: string) => {
           const safe = safeUrl(url);
           if (safe) nav({ type: "browser", url: safe });
@@ -741,6 +745,7 @@ function Home({ active }: { active: boolean }) {
   );
   const p: Portfolio | undefined = a.positions.data?.data;
   const me = a.me.data?.data;
+  const [inviteOpen, setInviteOpen] = useState(false);
   const copyAddress = () =>
     void Clipboard.setStringAsync(a.address)
       .then(() => showToast("Address copied"))
@@ -902,9 +907,12 @@ function Home({ active }: { active: boolean }) {
           >
             <Icon name="copy" size={16} color={colors.muted} />
           </Pressable>
+          <View style={{ flex: 1 }} />
+          <IconButton name="invite" label="Invite friends" quiet size={22} onPress={() => setInviteOpen(true)} />
         </View>
-        <View style={{ gap: 28 }}>
-          <View style={{ minWidth: 0, gap: 2 }}>
+        <InviteSheet visible={inviteOpen} onClose={() => setInviteOpen(false)} />
+        <View style={[m.between, { alignItems: "center" }]}>
+          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
             <View style={[m.row, { gap: 0 }]}>
               {!p && a.positions.isPending ? (
                 /* 32 + 5 top and bottom is the balance's 42 px line, so the
@@ -977,10 +985,7 @@ function Home({ active }: { active: boolean }) {
           </View>
           <View style={[m.row, { gap: 16 }]}>
             {(
-              [
-                ["Deposit", "Deposit assets", "receive"],
-                ["Withdraw", "Withdraw assets", "send"],
-              ] as const
+              [["Deposit", "Deposit assets", "receive"]] as const
             ).map(([title, label, route]) => (
               <Pressable
                 key={route}
@@ -2273,6 +2278,17 @@ function AssetScreen({ mint, active }: { mint: string; active: boolean }) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [a.pendingBuy, active, mint]);
+  useEffect(() => {
+    if (!active || !dockOpen) return;
+    a.backGuard.current = () => {
+      closeDock();
+      return true;
+    };
+    return () => {
+      a.backGuard.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, dockOpen]);
   const closeDock = () => {
     // Everything moves at once: keyboard away, card down, page space closing.
     // Ease-out, so the card leaves immediately rather than after a pause.
@@ -2601,7 +2617,7 @@ function AssetScreen({ mint, active }: { mint: string; active: boolean }) {
         watchlist stay in place while the page scrolls under them. */}
       <View style={s.assetHeader}>
         <View style={{ marginLeft: -12, marginRight: -2 }}>
-          <IconButton name="back" label="Go back" quiet onPress={a.back} />
+          <IconButton name="back" label="Go back" quiet onPress={() => (dockOpen ? closeDock() : a.back())} />
         </View>
         {asset ? (
           <>
@@ -5361,6 +5377,67 @@ async function saveDripRule(
   return true;
 }
 
+/** Inviting a friend: the code, what each side gets, and the ways to pass it on. */
+function InviteSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const a = useApp();
+  const credits = useMobile<AgentCredits>("agent-credits", {}, visible && !a.guest, 60000);
+  const referral = credits.data?.data.referral ?? null;
+  const rewards = credits.data?.data.rewards ?? null;
+  const dollars = (micro: number) => "$" + (micro / 1e6).toFixed(0);
+  const point = (title: string, body: string) => (
+    <View key={title} style={{ gap: 2 }}>
+      <Text style={[m.text, { fontFamily: fonts.medium, fontSize: 16 }]}>{title}</Text>
+      <Text style={[m.muted, { fontSize: 14, lineHeight: 20 }]}>{body}</Text>
+    </View>
+  );
+  return (
+    <OmenSheet visible={visible} onClose={onClose} title="Invite friends">
+      <View style={{ gap: 18, paddingHorizontal: 24, paddingBottom: 12 }}>
+        {!referral || !rewards ? (
+          credits.isError ? (
+            <Text style={m.muted}>Your invite code could not be loaded. Please try again.</Text>
+          ) : (
+            <SkeletonRows count={3} plain />
+          )
+        ) : (
+          <>
+            <View style={{ alignItems: "center", gap: 4, paddingVertical: 6 }}>
+              <Text style={m.label}>Your code</Text>
+              <Text style={[m.metric, { fontSize: 40, lineHeight: 48, letterSpacing: 4 }]}>{referral.code}</Text>
+              {referral.uses > 0 ? (
+                <Text style={m.muted}>
+                  {referral.uses + (referral.uses === 1 ? " friend has" : " friends have") + " joined"}
+                </Text>
+              ) : null}
+            </View>
+            {point(
+              "Your friend gets " + dollars(rewards.refereeMicro) + " and cheaper trades",
+              dollars(rewards.refereeMicro) +
+                " of free agent credits, and " +
+                Math.round(rewards.feeDiscountBps / 100) +
+                "% off trading fees for a month, when they sign up with your code.",
+            )}
+            {point(
+              "You get " + dollars(rewards.referrerMicro) + " for each friend",
+              dollars(rewards.referrerMicro) + " of agent credits each time someone joins with your code. The agent spends credits before your own money.",
+            )}
+            <View style={{ gap: 10 }}>
+              <Button
+                title="Share invite"
+                onPress={() => void Share.share({ message: inviteMessage(referral.code, rewards) }).catch(() => undefined)}
+              />
+              <Button
+                secondary
+                title="Copy code"
+                onPress={() => void Clipboard.setStringAsync(referral.code).then(() => showToast("Code copied"))}
+              />
+            </View>
+          </>
+        )}
+      </View>
+    </OmenSheet>
+  );
+}
 /** A token's dividend setting as a pill ("Automate", "Compounding", "→ USDC") that opens the drip sheet. */
 function DripPill({ mint, symbol, payout, payoutSymbol }: { mint: string; symbol: string; payout: string; payoutSymbol: string }) {
   const a = useApp();
@@ -5377,20 +5454,13 @@ function DripPill({ mint, symbol, payout, payoutSymbol }: { mint: string; symbol
       onPress={() => a.openDrip({ mint, symbol, payout, payoutSymbol })}
       style={({ pressed }) => [
         m.row,
-        {
-          gap: 5,
-          height: 32,
-          paddingHorizontal: 12,
-          borderRadius: 16,
-          backgroundColor: on ? colors.ice : colors.surfaceRaised,
-          opacity: pressed ? 0.7 : 1,
-        },
+        { gap: 6, minHeight: 32, opacity: pressed ? 0.6 : 1 },
       ]}
     >
-      {on ? <Icon name="check" size={13} color={colors.canvas} /> : null}
-      <Text style={[m.text, { fontFamily: fonts.medium, fontSize: 13, color: on ? colors.canvas : colors.ice }]}>
+      <Text style={[m.text, { fontFamily: fonts.medium, fontSize: 14, color: on ? colors.ice : colors.mist }]}>
         {on ? dripPillText(status, symbolOf) : "Automate"}
       </Text>
+      <Icon name="edit" size={15} color={colors.muted} />
     </Pressable>
   );
 }
@@ -7582,6 +7652,11 @@ function Settings() {
           a.setLocked(v);
         }}
       />
+      <View>
+        <Text style={[m.heading, { marginBottom: 4 }]}>Funds</Text>
+        {row("Deposit", () => a.nav({ type: "receive" }))}
+        {row("Withdraw", () => a.nav({ type: "send" }))}
+      </View>
       <WalletsSection
         wallets={a.wallets}
         hidden={a.hidden}
@@ -7895,12 +7970,12 @@ const s = StyleSheet.create({
     padding: 12,
     gap: 6,
   },
-  moveText: { fontFamily: fonts.bold, fontSize: 18, color: colors.ice },
+  moveText: { fontFamily: fonts.bold, fontSize: 17, color: colors.ice },
   moveButton: {
-    flex: 1,
-    height: 52,
+    height: 46,
+    paddingHorizontal: 22,
     borderRadius: BUTTON_RADIUS,
-    backgroundColor: colors.surfaceRaised,
+    backgroundColor: colors.cash,
     ...raised,
     alignItems: "center",
     justifyContent: "center",

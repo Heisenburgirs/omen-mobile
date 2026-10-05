@@ -183,7 +183,9 @@ export type IconName =
   | "more"
   | "pin"
   | "dollar"
-  | "trash";
+  | "trash"
+  | "edit"
+  | "invite";
 export function Icon({
   name,
   size = 22,
@@ -207,6 +209,8 @@ export function Icon({
     compose: "M11 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2v-5M17.6 3.6a2 2 0 012.8 2.8L12 14.8l-3.6.8.8-3.6z",
     dollar: "M12 3v18M16 7.4C15.6 5.9 14 5 12 5c-2.2 0-3.8 1.1-3.8 2.8 0 3.9 8 2 8 6.1 0 1.8-1.7 3.1-4.2 3.1-2.1 0-3.8-1-4.2-2.6",
     trash: "M4 7h16M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13M10 11v5M14 11v5",
+    edit: "M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4",
+    invite: "M15 20v-1.5a4 4 0 00-4-4H7a4 4 0 00-4 4V20M9 11a3.5 3.5 0 100-7 3.5 3.5 0 000 7zM19 8v6M16 11h6",
     more: "",
     pin: "M9 4h6M10 4v5l-3 4h10l-3-4V4M12 13v7",
     agent:
@@ -317,7 +321,7 @@ export function IconButton({
             ? colors.selected
             : colors.surfaceRaised,
         borderWidth: quiet ? 0 : 1,
-        borderColor: "rgba(255,255,255,0.14)",
+        borderColor: "transparent",
         overflow: "hidden",
         alignItems: "center",
         justifyContent: "center",
@@ -843,14 +847,7 @@ export function AssetRow({
                 onPress={drip.onPress}
                 style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", gap: 3, opacity: pressed ? 0.6 : 1 })}
               >
-                <Icon name="payout" size={11} color={drip.on ? colors.ice : colors.muted} />
-                <Text
-                  numberOfLines={1}
-                  style={[m.muted, { fontSize: 11, lineHeight: 14 }, small, drip.on && { color: colors.ice }]}
-                >
-                  {asset.stonk.payoutSymbol || "rewards"}
-                </Text>
-                {drip.on ? <Icon name="check" size={10} color={colors.ice} /> : null}
+                <Icon name="payout" size={13} color={drip.on ? colors.ice : colors.muted} />
               </Pressable>
             ) : (
               <View

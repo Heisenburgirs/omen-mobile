@@ -486,20 +486,23 @@ export function AgentScreen({
   return (
     <View ref={root} collapsable={false} style={{ flex: 1, paddingBottom: lift }}>
       <View style={s.header}>
-        <IconButton name="menu" label="Conversations and agent balance" quiet onPress={() => setDrawer(true)} />
+        <IconButton name="menu" label="Conversations and agent balance" quiet size={24} onPress={() => setDrawer(true)} />
         <Text numberOfLines={1} style={s.headerTitle}>
           {identity === "unlocking" ? "Unlocking…" : title ?? ""}
         </Text>
-        <IconButton
-          name="dollar"
-          label="Fund agent"
-          quiet
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Deposit to the agent"
+          hitSlop={8}
           onPress={() => {
             setFundSheet(true);
             void channel.loadLimits();
             void refreshIdle();
           }}
-        />
+          style={({ pressed }) => ({ minHeight: 44, justifyContent: "center", paddingLeft: 8, opacity: pressed ? 0.5 : 1 })}
+        >
+          <Text style={s.headerAction}>Deposit</Text>
+        </Pressable>
       </View>
 
       <ScrollView
@@ -628,6 +631,7 @@ const s = StyleSheet.create({
     paddingTop: space.sm,
     paddingBottom: 4,
   },
+  headerAction: { fontFamily: chatFonts.medium, fontSize: 17, color: colors.ice },
   headerTitle: { flex: 1, textAlign: "center", fontFamily: chatFonts.medium, fontSize: 15, color: colors.muted },
   thread: {
     flexGrow: 1,
