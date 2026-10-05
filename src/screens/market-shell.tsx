@@ -116,7 +116,7 @@ import { periodChange, formatApr } from "../domain/market";
 import { showToast } from "../lib/toast";
 import { playSound, preloadSounds } from "../lib/sound";
 import { LinearGradient } from "expo-linear-gradient";
-import { BUTTON_RADIUS, Gloss, raised } from "../components/gloss";
+import { BUTTON_RADIUS, Gloss, raised, raisedQuiet } from "../components/gloss";
 import { inviteMessage, type AgentCredits } from "../agent/credits";
 // The saved chart timeframe and style are ready before any token page opens.
 void loadChartPrefs();
@@ -191,6 +191,7 @@ type Route =
       payoutSymbol: string;
     }
   | { type: "onboarding" }
+  | { type: "payers"; symbol: string; payers: NonNullable<Asset["payers"]> }
   | {
       type: "receive" | "send" | "settings" | "edit" | "blocked" | "watchlist";
       /** Withdraw opens on this asset, e.g. cash from the cash page. */
@@ -410,7 +411,7 @@ export function MarketShell(props: MarketShellProps) {
   const [closing, setClosing] = useState(false);
   const nav = (r: Route) => {
     // A visitor can open a token or a page of the site; the rest is an account's.
-    if (guest && r.type !== "asset" && r.type !== "browser") return askSignIn();
+    if (guest && r.type !== "asset" && r.type !== "browser" && r.type !== "payers") return askSignIn();
     setClosing(false);
     setRoutes((rs) => [...rs, r]);
     // In a browser every screen is a history entry, so the browser's Back
@@ -652,6 +653,7 @@ export function MarketShell(props: MarketShellProps) {
                                       ? dripTitle(r.row)
                                       : "DRIP",
                                   watchlist: "Watchlist",
+                                  payers: "symbol" in r && r.symbol ? "Tokens that pay " + r.symbol : "Dividends",
                                   receive: "Deposit",
                                   send: "Send",
                                   settings: "Settings",
@@ -884,7 +886,6 @@ function Home({ active }: { active: boolean }) {
               >
                 {a.scopeLabel ?? me.displayName}
               </Text>
-              <Icon name="chevron" size={14} color={colors.muted} />
             </Pressable>
           ) : (
             <>
@@ -1713,7 +1714,10 @@ function RouteView({ route, active }: { route: Route; active: boolean }) {
     case "browser":
       return <InAppPage url={route.url} />;
     case "asset":
-      return <AssetScreen mint={route.mint} active={active} />;
+      // Cash is its own page: a balance and its history, no token furniture.
+      return route.mint === USDC ? <CashScreen active={active} /> : <AssetScreen mint={route.mint} active={active} />;
+    case "payers":
+      return <PayersScreen symbol={route.symbol} payers={route.payers} />;
     case "profile":
       return <ProfileScreen id={route.id} active={active} />;
     case "activity":
@@ -2943,6 +2947,7 @@ function AssetScreen({ mint, active }: { mint: string; active: boolean }) {
                 {a.guest || !a.scope ? null : (
                   <ActivityContent address={a.scope} active={active} dividends onlyMint={mint} />
                 )}
+                <PayersRow asset={asset} />
                 </>
               ) : asset.payers?.length ? (
                 // A payout token: the tokens that pay dividends in it, as a
@@ -2954,14 +2959,7 @@ function AssetScreen({ mint, active }: { mint: string; active: boolean }) {
                     " tokens pay dividends in " +
                     asset.symbol
                   }
-                  onPress={() =>
-                    a.nav({
-                      type: "dividends",
-                      mint,
-                      symbol: asset.symbol,
-                      role: "payout",
-                    })
-                  }
+                  onPress={() => a.nav({ type: "payers", symbol: asset.symbol, payers: asset.payers ?? [] })}
                   style={({ pressed }) => [
                     m.panel,
                     m.between,
@@ -5377,6 +5375,132 @@ async function saveDripRule(
   return true;
 }
 
+/** The tokens whose dividends are paid in one token: each opens its page, where it can be bought. */
+function PayersScreen({ symbol, payers }: { symbol: string; payers: NonNullable<Asset["payers"]> }) {
+  const a = useApp();
+  return (
+    <Page compact>
+      <Text style={m.muted}>
+        {"Hold any of these and its dividends are paid to you in " + symbol + "."}
+      </Text>
+      <View>
+        {payers.map((p) => (
+          <Pressable
+            key={p.mint}
+            accessibilityRole="button"
+            accessibilityLabel={"Open " + p.symbol}
+            onPress={() => a.nav({ type: "asset", mint: p.mint })}
+            style={({ pressed }) => [m.row, { gap: 12, minHeight: 60, opacity: pressed ? 0.6 : 1 }]}
+          >
+            <AssetIcon asset={{ ...emptyAsset(p.mint), symbol: p.symbol, name: p.symbol, image: p.image }} size={40} />
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text numberOfLines={1} style={[m.text, { fontFamily: fonts.bold, fontSize: 16 }]}>
+                {p.symbol}
+              </Text>
+              <Text style={m.muted}>{"Pays " + symbol}</Text>
+            </View>
+            <Text style={[m.text, { fontFamily: fonts.medium, color: colors.success }]}>Buy</Text>
+            <Icon name="chevron" size={16} color={colors.muted} />
+          </Pressable>
+        ))}
+      </View>
+    </Page>
+  );
+}
+/** "3 tokens pay STONK": opens the list of them. */
+function PayersRow({ asset }: { asset: Asset }) {
+  const a = useApp();
+  const payers = asset.payers ?? [];
+  if (!payers.length) return null;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={payers.length + " tokens pay dividends in " + asset.symbol}
+      onPress={() => a.nav({ type: "payers", symbol: asset.symbol, payers })}
+      style={({ pressed }) => [m.between, { minHeight: 44, opacity: pressed ? 0.6 : 1 }]}
+    >
+      <IconStack
+        assets={payers.map((p) => ({ ...emptyAsset(p.mint), symbol: p.symbol, name: p.symbol, image: p.image }))}
+        caption={payers.length + (payers.length === 1 ? " token pays " : " tokens pay ") + asset.symbol}
+      />
+      <Icon name="chevron" size={18} color={colors.muted} />
+    </Pressable>
+  );
+}
+/**
+ * Cash: what there is to spend, the two ways it moves, and where it went.
+ * It is held as a dollar stablecoin, which the page has no need to name.
+ */
+function CashScreen({ active }: { active: boolean }) {
+  const a = useApp();
+  const p: Portfolio | undefined = a.positions.data?.data;
+  const cash = (p?.holdings ?? []).filter((h) => isCash(h.asset.mint)).reduce((sum, h) => sum + Number(h.valueUsd ?? 0), 0);
+  const q = useMobile<Activity[]>("activity", { address: a.scope }, active && !a.guest && Boolean(a.scope));
+  // Only what moved cash, told from cash's side: in or out, and why.
+  const rows = (q.data?.data ?? []).flatMap((r) => {
+    const cashRow = isCash(r.mint);
+    const line =
+      r.kind === "deposit" && cashRow
+        ? { title: "Added cash", sign: 1 }
+        : r.kind === "withdrawal" && cashRow
+          ? { title: "Cashed out", sign: -1 }
+          : r.kind === "buy" && !cashRow
+            ? { title: "Bought " + r.symbol, sign: -1 }
+            : r.kind === "sell" && !cashRow
+              ? { title: "Sold " + r.symbol, sign: 1 }
+              : r.kind === "dividend" && cashRow
+                ? { title: "Dividend" + (r.sourceSymbol ? " from " + r.sourceSymbol : ""), sign: 1 }
+                : r.kind === "drip" && r.drip?.kind === "cashout"
+                  ? { title: "Dividends to cash", sign: 1 }
+                  : null;
+    return line && r.usd != null ? [{ ...line, id: r.id, usd: Math.abs(Number(r.usd)), at: r.timestamp }] : [];
+  });
+  return (
+    <Page compact refresh={() => Promise.all([a.positions.refetch(), q.refetch()])}>
+      <View style={[m.row, { gap: 4, marginLeft: -12, minHeight: 44 }]}>
+        <IconButton name="back" label="Go back" quiet size={22} onPress={a.back} />
+        <Text numberOfLines={1} style={[m.heading, { flex: 1 }]}>
+          Cash
+        </Text>
+      </View>
+      <Text numberOfLines={1} adjustsFontSizeToFit style={[m.metric, { fontSize: 42, lineHeight: 48 }]}>
+        {a.hidden ? "••••" : usd(cash)}
+      </Text>
+      <View style={[m.row, { gap: 12 }]}>
+        <View style={{ flex: 1 }}>
+          <Button title="Deposit" onPress={() => a.nav({ type: "receive" })} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Button secondary title="Withdraw" onPress={() => a.nav({ type: "send", mint: USDC })} />
+        </View>
+      </View>
+      <View>
+        <Text style={[m.heading, { marginBottom: 4 }]}>History</Text>
+        {q.isPending && !q.data ? (
+          <SkeletonRows count={4} plain />
+        ) : rows.length ? (
+          rows.map((r) => (
+            <View key={r.id} style={[m.between, { minHeight: 56 }]}>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text numberOfLines={1} style={[m.text, { fontFamily: fonts.medium, fontSize: 16 }]}>
+                  {r.title}
+                </Text>
+                <Text style={m.muted}>
+                  {new Date(r.at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                </Text>
+              </View>
+              <Text style={[m.text, { fontFamily: fonts.numericMedium, fontSize: 16, color: r.sign > 0 ? colors.success : colors.ice }]}>
+                {a.hidden ? "••••" : (r.sign > 0 ? "+" : "-") + usd(r.usd)}
+              </Text>
+            </View>
+          ))
+        ) : (
+          <Text style={m.muted}>Nothing yet. Deposit to get started.</Text>
+        )}
+      </View>
+    </Page>
+  );
+}
 /** Inviting a friend: the code, what each side gets, and the ways to pass it on. */
 function InviteSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const a = useApp();
@@ -8005,7 +8129,7 @@ const s = StyleSheet.create({
     justifyContent: "center",
   },
   // Withdrawing is the quieter of the two cash actions.
-  tradeButtonQuiet: { backgroundColor: colors.surfaceRaised },
+  tradeButtonQuiet: raisedQuiet,
   // Quick amounts: dark grey tiles, the chosen one a shade lighter.
   percentChip: {
     minHeight: 36,

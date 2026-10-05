@@ -9,7 +9,7 @@ import {
 } from "react-native";
 import { tradingColors as colors, tradingFonts as fonts } from "../theme";
 import { Icon, type IconName } from "./market-ui";
-import { BUTTON_RADIUS, Gloss, raised } from "./gloss";
+import { BUTTON_RADIUS, Gloss, raised, raisedQuiet } from "./gloss";
 export function RaisedButton({
   title,
   onPress,
@@ -44,7 +44,7 @@ export function RaisedButton({
         pressed && { opacity: 0.72 },
       ]}
     >
-      <Gloss />
+      {secondary ? null : <Gloss />}
       {busy ? (
         <ActivityIndicator color={colors.ice} />
       ) : (
@@ -70,7 +70,7 @@ const s = StyleSheet.create({
     gap: 8,
     backgroundColor: colors.cash,
   },
-  secondary: { backgroundColor: colors.surfaceRaised },
+  secondary: raisedQuiet,
   label: {
     fontFamily: fonts.bold,
     color: colors.ice,

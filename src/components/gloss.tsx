@@ -25,5 +25,16 @@ export const raised: ViewStyle = {
   borderBottomWidth: 2.5,
   borderBottomColor: "rgba(0,0,0,0.32)",
 };
+/** The quiet (grey) button's edge and fill. Goes after `raised`. */
+export const raisedQuiet: ViewStyle = {
+  backgroundColor: "#1B1B1D",
+  borderTopWidth: 1,
+  borderBottomWidth: 1,
+  borderLeftWidth: 1,
+  borderRightWidth: 1,
+  borderColor: "rgba(255,255,255,0.07)",
+  borderTopColor: "rgba(255,255,255,0.12)",
+  borderBottomColor: "rgba(255,255,255,0.04)",
+};
 /** Buttons are rounded rectangles, not pills. */
 export const BUTTON_RADIUS = 16;

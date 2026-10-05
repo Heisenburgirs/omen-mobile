@@ -492,7 +492,7 @@ export function AgentScreen({
         </Text>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Deposit to the agent"
+          accessibilityLabel="Fund the agent"
           hitSlop={8}
           onPress={() => {
             setFundSheet(true);
@@ -501,7 +501,7 @@ export function AgentScreen({
           }}
           style={({ pressed }) => ({ minHeight: 44, justifyContent: "center", paddingLeft: 8, opacity: pressed ? 0.5 : 1 })}
         >
-          <Text style={s.headerAction}>Deposit</Text>
+          <Text style={s.headerAction}>Fund</Text>
         </Pressable>
       </View>
 
@@ -631,7 +631,7 @@ const s = StyleSheet.create({
     paddingTop: space.sm,
     paddingBottom: 4,
   },
-  headerAction: { fontFamily: chatFonts.medium, fontSize: 17, color: colors.ice },
+  headerAction: { fontFamily: chatFonts.medium, fontSize: 15, color: colors.ice },
   headerTitle: { flex: 1, textAlign: "center", fontFamily: chatFonts.medium, fontSize: 15, color: colors.muted },
   thread: {
     flexGrow: 1,

@@ -92,28 +92,25 @@ export function AgentDrawer({
             { width, paddingTop: insets.top + 18, paddingBottom: insets.bottom + 12, transform: [{ translateX: x }] },
           ]}
         >
-          <Text style={m.label}>Agent balance</Text>
-          <Text numberOfLines={1} adjustsFontSizeToFit style={s.amount}>
-            {hidden ? "••••" : usd(balanceUsd)}
-          </Text>
-          {creditsUsd > 0.0005 && !hidden ? <Text style={s.credit}>{`${usd(creditsUsd)} free credits`}</Text> : null}
-          {invite ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Invite friends with code ${invite.code}`}
-              onPress={invite.onShare}
-              style={({ pressed }) => [s.invite, { opacity: pressed ? 0.6 : 1 }]}
-            >
-              <Icon name="ticket" size={18} color={colors.ice} />
-              <View style={{ flex: 1 }}>
-                <Text style={s.inviteTitle}>{`Invite friends · ${invite.code}`}</Text>
-                <Text style={s.inviteBody}>
-                  {`They get ${usd(invite.theyUsd)} of credits, you get ${usd(invite.youUsd)} each${invite.friends ? ` · ${invite.friends} joined` : ""}`}
-                </Text>
-              </View>
-              <Icon name="share" size={16} color={colors.muted} />
-            </Pressable>
-          ) : null}
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text numberOfLines={1} adjustsFontSizeToFit style={s.amount}>
+                {hidden ? "••••" : usd(balanceUsd)}
+              </Text>
+              {creditsUsd > 0.0005 && !hidden ? <Text style={s.credit}>{`${usd(creditsUsd)} free credits`}</Text> : null}
+            </View>
+            {invite ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Invite friends with code ${invite.code}`}
+                hitSlop={10}
+                onPress={invite.onShare}
+                style={({ pressed }) => ({ width: 40, height: 40, alignItems: "center", justifyContent: "center", opacity: pressed ? 0.5 : 1 })}
+              >
+                <Icon name="invite" size={22} color={colors.ice} />
+              </Pressable>
+            ) : null}
+          </View>
 
           <Pressable
             accessibilityRole="button"

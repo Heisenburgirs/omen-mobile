@@ -8,7 +8,7 @@ import {
   View,
 } from "react-native";
 import { colors, fonts } from "../theme";
-import { BUTTON_RADIUS, Gloss, raised } from "./gloss";
+import { BUTTON_RADIUS, Gloss, raised, raisedQuiet } from "./gloss";
 export function Mark({
   small = false,
   large = false,
@@ -79,7 +79,7 @@ export function Button({
         focused && s.focus,
       ]}
     >
-      <Gloss light={!secondary} />
+      {secondary ? null : <Gloss />}
       {busy ? (
         <ActivityIndicator color={colors.ice} />
       ) : (
@@ -169,7 +169,7 @@ const s = StyleSheet.create({
     justifyContent: "center",
     ...raised,
   },
-  secondary: { backgroundColor: colors.surfaceRaised },
+  secondary: raisedQuiet,
   buttonText: { fontFamily: fonts.bold, fontSize: 18, color: colors.ice },
   focus: { borderColor: colors.focus },
   notice: {
