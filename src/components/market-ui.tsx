@@ -398,11 +398,13 @@ export function Section({
   onPress,
   children,
 }: {
-  title: string;
+  /** Absent for a group that needs no name of its own. */
+  title?: string;
   action?: string;
   onPress?: () => void;
   children: React.ReactNode;
 }) {
+  if (!title && !action) return <View style={m.section}>{children}</View>;
   return (
     <View style={m.section}>
       <View style={m.between}>

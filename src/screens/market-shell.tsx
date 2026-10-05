@@ -2903,6 +2903,7 @@ function AssetScreen({ mint, active }: { mint: string; active: boolean }) {
               ) : null}
               {asset.stonk?.kind === "reward" || (paidByThis && Number(paidByThis.usd) > 0) ? (
                 <>
+                <View style={{ height: 1, backgroundColor: colors.line }} />
                 <View style={[m.panel, m.between]}>
                   <View style={{ gap: 4, flex: 1 }}>
                     {/* What it pays and the holder tax; the day's receipts
@@ -2949,6 +2950,7 @@ function AssetScreen({ mint, active }: { mint: string; active: boolean }) {
                   <ActivityContent address={a.scope} active={active} dividends onlyMint={mint} />
                 )}
                 <PayersRow asset={asset} />
+                <View style={{ height: 1, backgroundColor: colors.line }} />
                 </>
               ) : asset.payers?.length ? (
                 // A payout token: the tokens that pay dividends in it, as a
@@ -3015,7 +3017,7 @@ function AssetScreen({ mint, active }: { mint: string; active: boolean }) {
                   </View>
                 </View>
               ) : null}
-              <Section title="Market">
+              <Section>
                 <DetailGroup
                   pending={statsQuery.isPending}
                   title="Transactions 24h"

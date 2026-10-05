@@ -10,6 +10,7 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { transition } from "../lib/motion";
@@ -43,8 +44,8 @@ export function OmenSheet({
   const [mounted, setMounted] = useState(visible);
   const progress = useRef(new Animated.Value(0)).current;
   const reduced = useRef(false);
-  // How far the sheet travels: its own height once measured.
-  const [travel, setTravel] = useState(560);
+  // How far the sheet travels: a screen's height, so any sheet starts out of sight.
+  const travel = useWindowDimensions().height;
   const insets = useSafeAreaInsets();
   useEffect(() => {
     void AccessibilityInfo.isReduceMotionEnabled().then((v) => {
@@ -104,10 +105,6 @@ export function OmenSheet({
           style={{ flex: 1, justifyContent: "flex-end" }}
         >
           <Animated.View
-            onLayout={(e) => {
-              const h = Math.round(e.nativeEvent.layout.height);
-              if (h > 0 && Math.abs(h - travel) > 8) setTravel(h);
-            }}
             style={[
               s.sheet,
               {
