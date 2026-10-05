@@ -7,6 +7,7 @@ import { sponsoredTool, sponsoredWriter } from "../agent/credits-run";
 import { Icon, IconButton, m } from "../components/market-ui";
 import { AgentDrawer } from "../components/agent-drawer";
 import { OmenSheet } from "../components/omen-sheet";
+import { InviteSheet } from "../components/invite-sheet";
 import { AgentComposer } from "../components/agent-composer";
 import { AgentFundPanel } from "../components/agent-fund-panel";
 import { usd } from "../domain/market";
@@ -161,8 +162,10 @@ export function AgentScreen({
   const rewards = credits.data?.data.rewards ?? null;
   const invite = useCallback(() => {
     if (!referral || !rewards) return;
-    void Share.share({ message: inviteMessage(referral.code, rewards) }).catch(() => undefined);
+    setDrawer(false);
+    setInviteOpen(true);
   }, [referral, rewards]);
+  const [inviteOpen, setInviteOpen] = useState(false);
 
   // The keyboard covers the bottom of the window and nothing resizes for it
   // here, so the screen lifts its own bottom edge by however much it overlaps.
@@ -485,6 +488,7 @@ export function AgentScreen({
 
   return (
     <View ref={root} collapsable={false} style={{ flex: 1, paddingBottom: lift }}>
+      <InviteSheet visible={inviteOpen} onClose={() => setInviteOpen(false)} />
       <View style={s.header}>
         <IconButton name="menu" label="Conversations and agent balance" quiet size={24} onPress={() => setDrawer(true)} />
         <Text numberOfLines={1} style={s.headerTitle}>

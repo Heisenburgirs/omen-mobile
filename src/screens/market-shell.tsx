@@ -118,7 +118,7 @@ import { playSound, preloadSounds } from "../lib/sound";
 import { LinearGradient } from "expo-linear-gradient";
 import { BUTTON_RADIUS, Gloss, raised, raisedQuiet } from "../components/gloss";
 import { motion } from "../lib/motion";
-import { inviteMessage, type AgentCredits } from "../agent/credits";
+import { InviteSheet } from "../components/invite-sheet";
 // The saved chart timeframe and style are ready before any token page opens.
 void loadChartPrefs();
 const assetKey = (asset: Asset) => asset.mint;
@@ -904,21 +904,6 @@ function Home({ active }: { active: boolean }) {
               <Skeleton height={14} width={110} />
             </>
           )}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Copy wallet address"
-            onPress={copyAddress}
-            hitSlop={8}
-            style={({ pressed }) => ({
-              width: 32,
-              height: 32,
-              alignItems: "center",
-              justifyContent: "center",
-              opacity: pressed ? 0.5 : 1,
-            })}
-          >
-            <Icon name="copy" size={16} color={colors.muted} />
-          </Pressable>
           <View style={{ flex: 1 }} />
           <View style={{ marginRight: -11 }}>
             <IconButton name="invite" label="Invite friends" quiet size={22} onPress={() => setInviteOpen(true)} />
@@ -1018,11 +1003,7 @@ function Home({ active }: { active: boolean }) {
             ))}
           </View>
         </View>
-        {a.positions.isError ? (
-          <Pressable onPress={() => void a.positions.refetch()}>
-            <Text style={m.label}>Balance unavailable. Retry</Text>
-          </Pressable>
-        ) : p?.unpriced ? (
+        {a.positions.isError ? null : p?.unpriced ? (
           <Text style={m.label}>Partial balance · {p.unpriced} unpriced</Text>
         ) : a.positions.data?.coverage === "partial" ? (
           <Text style={m.label}>Estimated balance</Text>
@@ -1958,7 +1939,11 @@ function CompactStat({
   );
 }
 /** A buy-side and sell-side figure shown green / red on one row. */
-type Pair = { buy: string | null; sell: string | null };
+type Pair = { buy: string | null; sell: string | null; /** The buy side's share of the two, 0 to 1, for the bar. */ share?: number | null };
+const shareOf = (buy: number | null | undefined, sell: number | null | undefined) =>
+  buy == null || sell == null || !Number.isFinite(buy + sell) || buy + sell <= 0 ? null : buy / (buy + sell);
+/** A pair's row is taller than a plain one by its bar, loading or loaded. */
+const PAIR_ROW = 44;
 /** Label and value rows under a heading, for the token's About section. */
 function DetailGroup({
   title,
@@ -1986,12 +1971,16 @@ function DetailGroup({
         <Text style={[m.heading, { fontSize: 16, marginBottom: 4 }]}>
           {title}
         </Text>
-        {labels.map((label) => (
-          <View key={label} style={[m.between, { minHeight: 32 }]}>
-            <Text style={m.muted}>{label}</Text>
-            <Skeleton height={14} width={64} />
-          </View>
-        ))}
+        {rows.map((r) =>
+          r ? (
+            <View key={r[0]} style={{ height: r[1] && typeof r[1] === "object" ? PAIR_ROW : 32, justifyContent: "center" }}>
+              <View style={m.between}>
+                <Text style={m.muted}>{r[0]}</Text>
+                <Skeleton height={14} width={64} />
+              </View>
+            </View>
+          ) : null,
+        )}
       </View>
     );
   }
@@ -2008,22 +1997,38 @@ function DetailGroup({
       <Text style={[m.heading, { fontSize: 16, marginBottom: 4 }]}>
         {title}
       </Text>
-      {shown.map(([label, value]) => (
-        <View key={label} style={[m.between, { minHeight: 32 }]}>
-          <Text style={m.muted}>{label}</Text>
-          {typeof value === "string" ? (
+      {shown.map(([label, value]) =>
+        typeof value === "string" ? (
+          <View key={label} style={[m.between, { height: 32 }]}>
+            <Text style={m.muted}>{label}</Text>
             <Text numberOfLines={1} style={figure}>
               {value}
             </Text>
-          ) : (
-            <Text numberOfLines={1} style={figure}>
-              <Text style={{ color: colors.success }}>{value.buy ?? "–"}</Text>
-              <Text style={{ color: colors.muted }}> / </Text>
-              <Text style={{ color: colors.error }}>{value.sell ?? "–"}</Text>
-            </Text>
-          )}
-        </View>
-      ))}
+          </View>
+        ) : (
+          <View key={label} style={{ height: PAIR_ROW, justifyContent: "center", gap: 7 }}>
+            <View style={m.between}>
+              <Text style={m.muted}>{label}</Text>
+              <Text numberOfLines={1} style={figure}>
+                <Text style={{ color: colors.success }}>{value.buy ?? "–"}</Text>
+                <Text style={{ color: colors.muted }}> / </Text>
+                <Text style={{ color: colors.error }}>{value.sell ?? "–"}</Text>
+              </Text>
+            </View>
+            {/* Green for the buy side's share, red for the rest. */}
+            <View style={{ flexDirection: "row", height: 4, gap: 3 }}>
+              {value.share == null ? (
+                <View style={{ flex: 1, borderRadius: 2, backgroundColor: colors.surfaceRaised }} />
+              ) : (
+                <>
+                  <View style={{ flex: Math.max(value.share, 0.02), borderRadius: 2, backgroundColor: colors.success }} />
+                  <View style={{ flex: Math.max(1 - value.share, 0.02), borderRadius: 2, backgroundColor: colors.error }} />
+                </>
+              )}
+            </View>
+          </View>
+        ),
+      )}
     </View>
   );
 }
@@ -2928,26 +2933,6 @@ function AssetScreen({ mint, active }: { mint: string; active: boolean }) {
                             : "pool fees"}
                       </Text>
                     </View>
-                    {a.guest ? (
-                      <Text style={[m.muted, { fontSize: 13, lineHeight: 18 }]}>
-                        Paid to holders automatically
-                      </Text>
-                    ) : sources.isPending && holding ? (
-                      <View style={{ height: 18, justifyContent: "center" }}>
-                        <Skeleton height={12} width={120} />
-                      </View>
-                    ) : Number(paidByThis?.usd24h ?? 0) > 0 ? (
-                      <Text
-                        style={[
-                          m.muted,
-                          { fontSize: 13, lineHeight: 18, fontFamily: fonts.numeric },
-                        ]}
-                      >
-                        Received {a.hidden ? "••••" : usd(paidByThis?.usd24h)} today
-                      </Text>
-                    ) : (
-                      <Text style={[m.muted, { fontSize: 13, lineHeight: 18 }]}>Nothing received today</Text>
-                    )}
                   </View>
                   {/* What its dividends do, as a pill that changes it in one
                       sheet; the rest of the card opens the history. */}
@@ -3030,10 +3015,7 @@ function AssetScreen({ mint, active }: { mint: string; active: boolean }) {
                   </View>
                 </View>
               ) : null}
-              <Section title="About">
-                {asset.description ? (
-                  <Description text={asset.description} />
-                ) : null}
+              <Section title="Market">
                 <DetailGroup
                   pending={statsQuery.isPending}
                   title="Transactions 24h"
@@ -3044,6 +3026,7 @@ function AssetScreen({ mint, active }: { mint: string; active: boolean }) {
                       {
                         buy: count(stats?.buys24h),
                         sell: count(stats?.sells24h),
+                        share: shareOf(stats?.buys24h, stats?.sells24h),
                       },
                     ],
                     [
@@ -3051,6 +3034,7 @@ function AssetScreen({ mint, active }: { mint: string; active: boolean }) {
                       {
                         buy: money(stats?.buyVolume24h),
                         sell: money(stats?.sellVolume24h),
+                        share: shareOf(stats?.buyVolume24h, stats?.sellVolume24h),
                       },
                     ],
                     stats?.buyers24h != null || stats?.sellers24h != null
@@ -3059,6 +3043,7 @@ function AssetScreen({ mint, active }: { mint: string; active: boolean }) {
                           {
                             buy: count(stats?.buyers24h),
                             sell: count(stats?.sellers24h),
+                            share: shareOf(stats?.buyers24h, stats?.sellers24h),
                           },
                         ]
                       : ["Traders", count(stats?.traders24h)],
@@ -3120,6 +3105,12 @@ function AssetScreen({ mint, active }: { mint: string; active: boolean }) {
                     {mint.slice(0, 6)}…{mint.slice(-6)} ⧉
                   </Text>
                 </Pressable>
+                {asset.description ? (
+                  <View style={{ gap: 6, marginTop: 8 }}>
+                    <Text style={[m.heading, { fontSize: 16 }]}>About</Text>
+                    <Description text={asset.description} />
+                  </View>
+                ) : null}
                 <View style={[m.row, { flexWrap: "wrap", gap: 6 }]}>
                   {asset.website ? (
                     <Chip
@@ -4044,17 +4035,6 @@ function ProfileScreen({ id, active }: { id?: string; active: boolean }) {
   // width beside the X mark.
   const ownIcons = (
     <View style={[m.row, { gap: 0, marginRight: -8 }]}>
-      <IconButton
-        quiet
-        name="info"
-        label="About your public profile"
-        onPress={() =>
-          a.dialog(
-            "Your public profile",
-            "Your positions and performance are public.",
-          )
-        }
-      />
       <View style={{ marginLeft: -10 }}>
         <IconButton
           quiet
@@ -4550,39 +4530,14 @@ function ActivityContent({
     <>
       {/* What the list shows: every payout, or what DRIP did with them. */}
       {dividends ? (
-        <View style={{ height: 36, justifyContent: "center" }}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ gap: 18 }}
-          >
-            {whats.map(([value, label]) => (
-              <Pressable
-                key={value}
-                accessibilityRole="button"
-                accessibilityState={{ selected: what === value }}
-                onPress={() => setWhat(value)}
-                style={({ pressed }) => ({
-                  minHeight: 36,
-                  justifyContent: "center",
-                  opacity: pressed ? 0.5 : 1,
-                })}
-              >
-                <Text
-                  style={[
-                    m.text,
-                    {
-                      fontSize: 13,
-                      fontFamily: fonts.medium,
-                      color: what === value ? colors.ice : colors.muted,
-                    },
-                  ]}
-                >
-                  {label}
-                </Text>
-              </Pressable>
-            ))}
-          </ScrollView>
+        <View style={[m.between, { height: 40 }]}>
+          <Text style={[m.heading, { fontSize: 16 }]}>{onlyMint ? "Dividends" : "History"}</Text>
+          <Dropdown
+            value={what}
+            options={whats.map(([value, label]) => ({ value, label }))}
+            onChange={setWhat}
+            label="Show"
+          />
         </View>
       ) : null}
       {loaded.length === 0 && q.isPending ? (
@@ -5518,67 +5473,6 @@ function CashScreen({ active }: { active: boolean }) {
     </Page>
   );
 }
-/** Inviting a friend: the code, what each side gets, and the ways to pass it on. */
-function InviteSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
-  const a = useApp();
-  const credits = useMobile<AgentCredits>("agent-credits", {}, visible && !a.guest, 60000);
-  const referral = credits.data?.data.referral ?? null;
-  const rewards = credits.data?.data.rewards ?? null;
-  const dollars = (micro: number) => "$" + (micro / 1e6).toFixed(0);
-  const point = (title: string, body: string) => (
-    <View key={title} style={{ gap: 2 }}>
-      <Text style={[m.text, { fontFamily: fonts.medium, fontSize: 16 }]}>{title}</Text>
-      <Text style={[m.muted, { fontSize: 14, lineHeight: 20 }]}>{body}</Text>
-    </View>
-  );
-  return (
-    <OmenSheet visible={visible} onClose={onClose} title="Invite friends">
-      <View style={{ gap: 18, paddingHorizontal: 24, paddingBottom: 12 }}>
-        {!referral || !rewards ? (
-          credits.isError ? (
-            <Text style={m.muted}>Your invite code could not be loaded. Please try again.</Text>
-          ) : (
-            <SkeletonRows count={3} plain />
-          )
-        ) : (
-          <>
-            <View style={{ alignItems: "center", gap: 4, paddingVertical: 6 }}>
-              <Text style={m.label}>Your code</Text>
-              <Text style={[m.metric, { fontSize: 40, lineHeight: 48, letterSpacing: 4 }]}>{referral.code}</Text>
-              {referral.uses > 0 ? (
-                <Text style={m.muted}>
-                  {referral.uses + (referral.uses === 1 ? " friend has" : " friends have") + " joined"}
-                </Text>
-              ) : null}
-            </View>
-            {point(
-              "Your friend gets " + dollars(rewards.refereeMicro) + " and cheaper trades",
-              dollars(rewards.refereeMicro) +
-                " of free agent credits, and " +
-                Math.round(rewards.feeDiscountBps / 100) +
-                "% off trading fees for a month, when they sign up with your code.",
-            )}
-            {point(
-              "You get " + dollars(rewards.referrerMicro) + " for each friend",
-              dollars(rewards.referrerMicro) + " of agent credits each time someone joins with your code. The agent spends credits before your own money.",
-            )}
-            <View style={{ gap: 10 }}>
-              <Button
-                title="Share invite"
-                onPress={() => void Share.share({ message: inviteMessage(referral.code, rewards) }).catch(() => undefined)}
-              />
-              <Button
-                secondary
-                title="Copy code"
-                onPress={() => void Clipboard.setStringAsync(referral.code).then(() => showToast("Code copied"))}
-              />
-            </View>
-          </>
-        )}
-      </View>
-    </OmenSheet>
-  );
-}
 /** A token's dividend setting as a pill ("Automate", "Compounding", "→ USDC") that opens the drip sheet. */
 function DripPill({ mint, symbol, payout, payoutSymbol }: { mint: string; symbol: string; payout: string; payoutSymbol: string }) {
   const a = useApp();
@@ -5721,7 +5615,11 @@ function DripSheet({ subject, onClose }: { subject: DripSubject | null; onClose:
         key={value}
         accessibilityRole="radio"
         accessibilityState={{ selected: on }}
-        onPress={() => setPick(value)}
+        onPress={() => {
+          // What a choice reveals (the swap targets, the threshold) eases in.
+          LayoutAnimation.configureNext(LayoutAnimation.create(180, LayoutAnimation.Types.easeInEaseOut, LayoutAnimation.Properties.opacity));
+          setPick(value);
+        }}
         style={({ pressed }) => [s.dripOption, on && s.dripOptionOn, { opacity: pressed ? 0.7 : 1 }]}
       >
         <View style={[s.dripRadio, on && { borderColor: colors.ice }]}>{on ? <View style={s.dripRadioDot} /> : null}</View>
@@ -5772,11 +5670,11 @@ function DripSheet({ subject, onClose }: { subject: DripSubject | null; onClose:
       title={subject.intro ? "$" + subject.symbol + " pays dividends" : "$" + subject.symbol + " dividends"}
     >
       <View style={{ gap: 10, paddingHorizontal: 24, paddingBottom: 12 }}>
-        <Text style={m.muted}>
-          {subject.intro
-            ? "It pays you in $" + subject.payoutSymbol + ". Auto-compound them into more $" + subject.symbol + "?"
-            : "Paid to you in $" + subject.payoutSymbol + "."}
-        </Text>
+        {subject.intro ? (
+          <Text style={m.muted}>
+            {"It pays you in $" + subject.payoutSymbol + ". Auto-compound them into more $" + subject.symbol + "?"}
+          </Text>
+        ) : null}
         {!supported ? (
           <Text style={[m.text, { color: colors.mist }]}>{"Automating $" + subject.payoutSymbol + " dividends isn't available yet."}</Text>
         ) : (
@@ -5832,20 +5730,40 @@ function DripSheet({ subject, onClose }: { subject: DripSubject | null; onClose:
             {option("keep", "Keep", "Stays as $" + subject.payoutSymbol)}
             {pick !== "keep" ? (
               editMin ? (
-                <View style={[m.row, { gap: 8 }]}>
-                  <Text style={m.muted}>Run once dividends reach $</Text>
-                  <Field
-                    accessibilityLabel="Dividends to wait for, in dollars"
-                    placeholder={String(floorUsd)}
-                    value={minText}
-                    onChangeText={(v) => setMinText(v.replace(/[^0-9.,]/g, "").slice(0, 9))}
-                    keyboardType="decimal-pad"
-                    autoFocus
-                    style={{ width: 90, minHeight: 36 }}
-                  />
+                <View style={[m.between, s.dripThreshold]}>
+                  <Text style={[m.text, { color: colors.mist }]}>Run once dividends reach</Text>
+                  <View style={[m.row, { gap: 2 }]}>
+                    <Text style={[m.text, { fontFamily: fonts.numericMedium, fontSize: 16, color: minText ? colors.ice : colors.muted }]}>$</Text>
+                    <Field
+                      accessibilityLabel="Dividends to wait for, in dollars"
+                      placeholder={String(floorUsd)}
+                      value={minText}
+                      onChangeText={(v) => setMinText(v.replace(/[^0-9.,]/g, "").slice(0, 9))}
+                      keyboardType="decimal-pad"
+                      autoFocus
+                      style={{
+                        minWidth: 44,
+                        minHeight: 40,
+                        paddingHorizontal: 0,
+                        paddingVertical: 0,
+                        borderWidth: 0,
+                        backgroundColor: "transparent",
+                        fontFamily: fonts.numericMedium,
+                        fontSize: 16,
+                        textAlign: "right",
+                      }}
+                    />
+                  </View>
                 </View>
               ) : (
-                <Pressable accessibilityRole="button" onPress={() => setEditMin(true)} hitSlop={6}>
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => {
+                    LayoutAnimation.configureNext(LayoutAnimation.create(180, LayoutAnimation.Types.easeInEaseOut, LayoutAnimation.Properties.opacity));
+                    setEditMin(true);
+                  }}
+                  hitSlop={6}
+                >
                   <Text style={m.muted}>
                     Runs once {usd(minUsd)} has built up · <Text style={{ color: colors.ice }}>edit</Text>
                   </Text>
@@ -7099,9 +7017,6 @@ function ActivityScreen({
           period={scope ? "All" : period}
         />
       ) : null}
-      {dividends ? (
-        <Text style={[m.heading, { marginTop: 4 }]}>History</Text>
-      ) : null}
       <ActivityContent
         address={wallet}
         active={active}
@@ -8108,6 +8023,15 @@ const s = StyleSheet.create({
     borderRadius: 12,
     padding: 12,
     gap: 6,
+  },
+  // The dividends sheet's threshold: one row in the options' own shape.
+  dripThreshold: {
+    minHeight: 52,
+    paddingHorizontal: 16,
+    borderRadius: 14,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.line,
   },
   moveText: { fontFamily: fonts.bold, fontSize: 17, color: colors.ice },
   moveButton: {
