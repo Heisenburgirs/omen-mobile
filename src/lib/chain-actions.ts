@@ -403,7 +403,15 @@ export function useChainActions() {
     },
     [ensureSponsorship, runSponsored, runSelfSigned],
   );
-  return { quote, swap, transfer, signerStatus, ensureSponsorship, ensureDripSigner, importKey, renameWallet };
+  /** Stake SKR with the Guardian, start unstaking it, or withdraw it after the cooldown. */
+  const stakeSkr = useCallback(
+    async (input: { action: "stake" | "unstake" | "withdraw"; amount?: string; wallet?: string }) => {
+      if (!(await ensureSponsorship(input.wallet))) throw new Error("Staking is not set up for this wallet yet. Please try again.");
+      return runSponsored("skr-stake", { action: input.action, ...(input.amount ? { amount: input.amount } : {}), ...(input.wallet ? { wallet: input.wallet } : {}) });
+    },
+    [ensureSponsorship, runSponsored],
+  );
+  return { quote, swap, transfer, stakeSkr, signerStatus, ensureSponsorship, ensureDripSigner, importKey, renameWallet };
 }
 
 export const errorMessage = (e: unknown) =>

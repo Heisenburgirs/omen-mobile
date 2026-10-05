@@ -195,7 +195,7 @@ export type Sort =
   "volume" | "apr" | "newest" | "cap" | "liquidity" | "gainers" | "losers";
 /** A DRIP swap's story: what the dividends became, and what they were. */
 export type DripRecord = {
-  kind: "buyback" | "cashout" | "swap";
+  kind: "buyback" | "cashout" | "swap" | "stake";
   payoutMint: string;
   payoutSymbol: string;
   payoutAmount: string;

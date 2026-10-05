@@ -2842,6 +2842,13 @@ function AssetScreen({ mint, active }: { mint: string; active: boolean }) {
                   </Text>
                 </View>
               </View>
+              {mint === SKR_MINT ? (
+                <SkrStakeCard
+                  active={active}
+                  price={Number.isFinite(Number(asset.price)) ? Number(asset.price) : null}
+                  wallet={[...(holding?.wallets ?? [])].sort((x, y) => (BigInt(y.raw) > BigInt(x.raw) ? 1 : -1))[0]?.address}
+                />
+              ) : null}
               {asset.stonk?.kind === "reward" || (paidByThis && Number(paidByThis.usd) > 0) ? (
                 <Pressable
                   accessibilityRole="button"
@@ -4691,6 +4698,8 @@ type DripRule = {
   progress?: { raw: string; usd: number | null; minUsd: number };
   settings?: {
     target?: string;
+    /** "stake": SKR dividends are staked instead of swapped. */
+    action?: "stake";
     payout?: string;
     minUsd?: number;
     last?: {
@@ -4719,6 +4728,7 @@ function ruleWords(
     return aggregateOn
       ? "Follows the " + payoutSymbol + " rule"
       : "Kept as " + payoutSymbol;
+  if (rule?.settings?.action === "stake") return "Staked with the Guardian";
   if (target === USDC) return "Converted to cash";
   if (parentMint && target === parentMint)
     return "Buys back " + symbolOf(parentMint);
@@ -5272,7 +5282,7 @@ function PaidInGroup({
  * `via` says which, so the sheet can say when a token follows the latter.
  */
 function dripStatus(rules: DripRule[] | undefined, mint: string, payout: string | null | undefined) {
-  if (!payout) return { on: false, target: null as string | null, compound: false, via: null as "own" | "all" | null, minUsd: null as number | null };
+  if (!payout) return { on: false, target: null as string | null, compound: false, stake: false, via: null as "own" | "all" | null, minUsd: null as number | null };
   const own = rules?.find((r) => r.kind === "drip-from" && r.mint === mint && r.settings?.payout === payout && r.enabled);
   const all = rules?.find((r) => r.kind === "drip" && r.mint === payout && r.enabled);
   const rule = own ?? all;
@@ -5280,7 +5290,8 @@ function dripStatus(rules: DripRule[] | undefined, mint: string, payout: string 
   return {
     on: Boolean(rule),
     target,
-    compound: Boolean(own) && target === mint,
+    compound: Boolean(own) && target === mint && rule?.settings?.action !== "stake",
+    stake: rule?.settings?.action === "stake",
     via: own ? ("own" as const) : all ? ("all" as const) : null,
     minUsd: rule?.settings?.minUsd ?? null,
   };
@@ -5289,6 +5300,7 @@ function dripStatus(rules: DripRule[] | undefined, mint: string, payout: string 
 /** A few words for a status pill: "Compounding", "→ USDC", "Keep". */
 function dripPillText(status: ReturnType<typeof dripStatus>, symbolOf: (mint: string) => string): string {
   if (!status.on || !status.target) return "Keep";
+  if (status.stake) return "Staking";
   if (status.compound) return "Compounding";
   return "→ " + symbolOf(status.target);
 }
@@ -5304,7 +5316,7 @@ async function saveDripRule(
   a: any,
   actions: ReturnType<typeof useChainActions>,
   rules: DripRule[],
-  input: { mint: string; payout: string; enabled: boolean; target: string | null; minUsd?: number },
+  input: { mint: string; payout: string; enabled: boolean; target: string | null; minUsd?: number; action?: "stake" },
 ): Promise<boolean> {
   const kind = "drip-from";
   const book: Portfolio | undefined = a.positions.data?.data;
@@ -5317,6 +5329,7 @@ async function saveDripRule(
   const existing = rules.filter((r) => r.kind === kind && r.mint === input.mint && r.settings?.payout === input.payout);
   const having = existing.filter((r) => r.wallet).map((r) => r.wallet!);
   const previous = existing[0]?.settings?.target;
+  const action = input.enabled ? input.action : existing[0]?.settings?.action;
   const wallets: (string | undefined)[] = [...new Set(input.enabled ? (held.length ? held : all) : having)];
   for (const wallet of wallets.length ? wallets : [undefined]) {
     if (input.enabled) await actions.ensureDripSigner(wallet);
@@ -5327,6 +5340,7 @@ async function saveDripRule(
       ...(wallet ? { wallet } : {}),
       settings: {
         target: input.enabled ? input.target : previous,
+        ...(action === "stake" ? { action } : {}),
         payout: input.payout,
         ...(input.enabled && input.minUsd ? { minUsd: input.minUsd } : {}),
         includeExisting: true,
@@ -5389,8 +5403,8 @@ function DripSheet({ subject, onClose }: { subject: DripSubject | null; onClose:
   const floorUsd = config.data?.data.minUsd ?? 1;
   const supported = !config.data || (config.data.data.payouts ?? []).some((p) => p.mint === subject?.payout);
   const status = dripStatus(rules, subject?.mint ?? "", subject?.payout);
-  type Pick = "keep" | "compound" | "swap";
-  const currentPick: Pick = !status.on ? "keep" : status.compound ? "compound" : "swap";
+  type Pick = "keep" | "compound" | "swap" | "stake";
+  const currentPick: Pick = !status.on ? "keep" : status.stake ? "stake" : status.compound ? "compound" : "swap";
   const [pick, setPick] = useState<Pick>("compound");
   const [other, setOther] = useState<{ mint: string; symbol: string } | null>(null);
   const [q, setQ] = useState("");
@@ -5416,7 +5430,7 @@ function DripSheet({ subject, onClose }: { subject: DripSubject | null; onClose:
     if (initialised.current === key || !a.dripRules?.data) return;
     initialised.current = key;
     setPick(status.on ? currentPick : "compound");
-    setOther(status.on && !status.compound && status.target ? { mint: status.target, symbol: symbolOf(status.target) } : null);
+    setOther(status.on && !status.compound && !status.stake && status.target ? { mint: status.target, symbol: symbolOf(status.target) } : null);
     setQ("");
     setSearch("");
     setEditMin(false);
@@ -5434,12 +5448,12 @@ function DripSheet({ subject, onClose }: { subject: DripSubject | null; onClose:
   const minNumber = Number(minText.replace(",", "."));
   const minOk = !minText || (Number.isFinite(minNumber) && minNumber >= floorUsd && minNumber <= 1_000_000);
   const minUsd = minText && minOk ? Math.round(minNumber * 100) / 100 : floorUsd;
-  const target = pick === "compound" ? subject.mint : pick === "swap" ? (other?.mint ?? null) : null;
+  const target = pick === "compound" ? subject.mint : pick === "stake" ? subject.payout : pick === "swap" ? (other?.mint ?? null) : null;
   const changed =
     pick !== currentPick ||
     (pick === "swap" && other?.mint !== status.target) ||
     (pick !== "keep" && minUsd !== Math.max(floorUsd, status.minUsd ?? floorUsd));
-  const valid = pick === "keep" ? status.via === "own" : Boolean(target && target !== subject.payout) && minOk;
+  const valid = pick === "keep" ? status.via === "own" : pick === "stake" ? minOk : Boolean(target && target !== subject.payout) && minOk;
   const label = saving
     ? "Saving…"
     : pick === "keep"
@@ -5463,6 +5477,7 @@ function DripSheet({ subject, onClose }: { subject: DripSubject | null; onClose:
         enabled: pick !== "keep",
         target,
         minUsd,
+        ...(pick === "stake" ? { action: "stake" as const } : {}),
       });
       if (!ok) return;
       showToast(
@@ -5470,6 +5485,8 @@ function DripSheet({ subject, onClose }: { subject: DripSubject | null; onClose:
           ? "$" + subject.payoutSymbol + " dividends from $" + subject.symbol + " stay as $" + subject.payoutSymbol
           : pick === "compound"
             ? "Auto-compounding $" + subject.symbol + " dividends"
+            : pick === "stake"
+              ? "$" + subject.payoutSymbol + " dividends from $" + subject.symbol + " will be staked"
             : "$" + subject.payoutSymbol + " dividends from $" + subject.symbol + " will buy $" + (other?.symbol ?? ""),
       );
       void a.dripRules?.refetch?.();
@@ -5548,6 +5565,7 @@ function DripSheet({ subject, onClose }: { subject: DripSubject | null; onClose:
         ) : (
           <>
             {option("compound", "Auto-compound", "Buy more $" + subject.symbol)}
+            {subject.payout === SKR_MINT ? option("stake", "Stake", "Earn more SKR with Solana Mobile's Guardian") : null}
             {option("swap", "Swap", "Into a stablecoin or any asset")}
             {pick === "swap" ? (
               <View style={{ gap: 8 }}>
@@ -5654,10 +5672,12 @@ function DripScreen({
   );
   // Cashing out is a swap into a stablecoin: a rule that targets USDC opens
   // as a Swap with USDC picked.
-  type Choice = "keep" | "buyback" | "other";
+  type Choice = "keep" | "buyback" | "other" | "stake";
   const current: { choice: Choice; other: string | null } =
     !rule?.enabled || !rule.settings?.target
       ? { choice: "keep", other: null }
+      : rule.settings.action === "stake"
+        ? { choice: "stake", other: null }
       : kind === "drip-from" && rule.settings.target === mint
         ? { choice: "buyback", other: null }
         : { choice: "other", other: rule.settings.target };
@@ -5792,7 +5812,9 @@ function DripScreen({
     }
   };
   const target =
-    choice === "buyback"
+    choice === "stake"
+      ? payout
+      : choice === "buyback"
       ? mint
       : choice === "other"
         ? (other?.mint ?? null)
@@ -5804,7 +5826,9 @@ function DripScreen({
   const valid =
     choice === "keep"
       ? Boolean(rule)
-      : Boolean(target && target !== payout) && customOk;
+      : choice === "stake"
+        ? customOk
+        : Boolean(target && target !== payout) && customOk;
   const save = async () => {
     if (saving || !changed || !valid) return;
     setSaving(true);
@@ -5835,6 +5859,7 @@ function DripScreen({
           ...(wallet ? { wallet } : {}),
           settings: {
             target: enabled ? target : rule?.settings?.target,
+            ...((enabled ? choice === "stake" : rule?.settings?.action === "stake") ? { action: "stake" } : {}),
             ...(kind === "drip-from" ? { payout } : {}),
             ...(enabled ? { minUsd } : {}),
             includeExisting: true,
@@ -5845,6 +5870,8 @@ function DripScreen({
       showToast(
         choice === "keep"
           ? "$" + payoutSymbol + " dividends stay as $" + payoutSymbol
+          : choice === "stake"
+            ? "$" + payoutSymbol + " dividends will be staked"
           : choice === "buyback"
             ? "$" +
               payoutSymbol +
@@ -5979,6 +6006,9 @@ function DripScreen({
           )}
           {kind === "drip-from"
             ? option("buyback", "Compound", "Reinvest into $" + symbol)
+            : null}
+          {payout === SKR_MINT
+            ? option("stake", "Stake", "Earn more SKR with Solana Mobile's Guardian")
             : null}
           {option("other", "Swap", "Any asset, stablecoins included")}
           {choice === "other" ? (
@@ -6257,11 +6287,160 @@ function DripScreen({
     </View>
   );
 }
+const SKR_MINT = "SKRbvo6Gf7GondiT3BbTfuRDPqLWei4j2Qy2NPGZhW3";
+type SkrStake = {
+  staked: number;
+  rewards: number;
+  unstaking: number;
+  withdrawableAt: string | null;
+  withdrawable: boolean;
+  available: number;
+  minStake: number;
+  cooldownHours: number;
+  guardian: string;
+};
+/** SKR staked with Solana Mobile's Guardian from this wallet: what it is worth, and the ways in and out. */
+function SkrStakeCard({ active, price, wallet }: { active: boolean; price: number | null; wallet?: string }) {
+  const a = useApp();
+  const actions = useChainActions();
+  const stake = useMobile<SkrStake>("skr-stake", wallet ? { wallet } : {}, active && !a.guest, 30000);
+  const [sheet, setSheet] = useState<"stake" | "unstake" | null>(null);
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const p = stake.data?.data;
+  if (a.guest || !p) return null;
+  const qty = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  const limit = sheet === "stake" ? p.available : p.staked;
+  const whole = String(Math.floor(limit * 1e6) / 1e6);
+  const amount = Number(text.replace(",", "."));
+  const valid = Number.isFinite(amount) && amount > 0 && amount <= limit && (sheet !== "stake" || amount >= p.minStake);
+  const run = async (action: "stake" | "unstake" | "withdraw", value?: string) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await actions.stakeSkr({ action, ...(value ? { amount: value } : {}), ...(wallet ? { wallet } : {}) });
+      showToast(
+        action === "stake"
+          ? "Staking your SKR"
+          : action === "unstake"
+            ? "Unstaking. Ready to withdraw in " + p.cooldownHours + " hours"
+            : "Your SKR is on its way back",
+      );
+      setSheet(null);
+      setText("");
+      setTimeout(() => void stake.refetch(), 4000);
+    } catch (e) {
+      showErrorToast(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const ready = p.withdrawableAt ? new Date(p.withdrawableAt) : null;
+  return (
+    <View style={[m.panel, { gap: 12 }]}>
+      <View style={[m.between, { alignItems: "flex-end" }]}>
+        <View style={{ gap: 2, flex: 1, minWidth: 0 }}>
+          <Text style={m.label}>Staked</Text>
+          <Text numberOfLines={1} adjustsFontSizeToFit style={[m.metric, { fontSize: 24 }]}>
+            {a.hidden ? "••••" : qty(p.staked) + " SKR"}
+          </Text>
+        </View>
+        <View style={{ alignItems: "flex-end", gap: 4 }}>
+          {price != null && p.staked > 0 ? (
+            <Text style={[m.muted, { fontFamily: fonts.numeric, fontSize: 13 }]}>{a.hidden ? "••••" : usd(p.staked * price)}</Text>
+          ) : null}
+          {p.rewards >= 0.01 ? (
+            <Text style={[m.muted, { fontFamily: fonts.numeric, fontSize: 13, color: colors.success }]}>
+              {a.hidden ? "••••" : "+" + qty(p.rewards) + " earned"}
+            </Text>
+          ) : null}
+        </View>
+      </View>
+      <Text style={[m.muted, { fontSize: 12, lineHeight: 16 }]}>
+        {p.staked > 0
+          ? "Earning more SKR with " + p.guardian + "'s Guardian."
+          : "Stake SKR with " + p.guardian + "'s Guardian to earn more SKR."}{" "}
+        Unstaking takes {p.cooldownHours} hours.
+      </Text>
+      {p.unstaking > 0 ? (
+        <View style={[m.between, { alignItems: "center", gap: 8 }]}>
+          <Text style={[m.muted, { flex: 1, fontSize: 13 }]}>
+            {"Unstaking " + (a.hidden ? "••••" : qty(p.unstaking)) + " SKR"}
+            {p.withdrawable || !ready
+              ? ""
+              : " · ready " + ready.toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit" })}
+          </Text>
+          {p.withdrawable ? (
+            <View style={{ width: 120 }}>
+              <Button title="Withdraw" busy={busy} disabled={busy} onPress={() => void run("withdraw")} />
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+      <View style={[m.row, { gap: 8 }]}>
+        <View style={{ flex: 1 }}>
+          <Button
+            title="Stake"
+            disabled={p.available < p.minStake}
+            onPress={() => {
+              setText("");
+              setSheet("stake");
+            }}
+          />
+        </View>
+        {p.staked > 0 ? (
+          <View style={{ flex: 1 }}>
+            <Button
+              secondary
+              title="Unstake"
+              onPress={() => {
+                setText("");
+                setSheet("unstake");
+              }}
+            />
+          </View>
+        ) : null}
+      </View>
+      <OmenSheet visible={sheet !== null} onClose={() => !busy && setSheet(null)} title={sheet === "unstake" ? "Unstake SKR" : "Stake SKR"}>
+        <View style={{ gap: 10, paddingHorizontal: 24, paddingBottom: 12 }}>
+          <Text style={m.muted}>
+            {sheet === "unstake"
+              ? "It stops earning now and can be withdrawn after " + p.cooldownHours + " hours."
+              : "It earns more SKR with " + p.guardian + "'s Guardian. Unstaking takes " + p.cooldownHours + " hours."}
+          </Text>
+          <View style={[m.row, { gap: 8 }]}>
+            <Field
+              accessibilityLabel="Amount of SKR"
+              placeholder="0"
+              value={text}
+              onChangeText={(v) => setText(v.replace(/[^0-9.,]/g, "").slice(0, 16))}
+              keyboardType="decimal-pad"
+              style={{ flex: 1, minWidth: 0 }}
+            />
+            <Pressable accessibilityRole="button" onPress={() => setText(whole)} hitSlop={8} style={{ paddingHorizontal: 8 }}>
+              <Text style={[m.text, { fontFamily: fonts.medium }]}>Max</Text>
+            </Pressable>
+          </View>
+          <Text style={[m.muted, { fontSize: 12 }]}>
+            {(sheet === "unstake" ? "Staked: " : "Available: ") + qty(limit) + " SKR"}
+            {sheet === "stake" && !p.staked ? " · opening a stake account costs a one-time fee in USDC" : ""}
+          </Text>
+          <Button
+            title={busy ? "Sending…" : sheet === "unstake" ? "Unstake" : "Stake"}
+            busy={busy}
+            disabled={busy || !valid}
+            onPress={() => sheet && void run(sheet, text === whole ? "all" : String(amount))}
+          />
+        </View>
+      </OmenSheet>
+    </View>
+  );
+}
 /** "Compound ZCAT", "Swap ZCAT": a drip named after the token whose dividends it used (a cash-out is a swap into USDC). */
 const dripTitle = (r: Activity) => {
   const d = r.drip!;
   const of = d.sourceSymbol ?? d.payoutSymbol;
-  return (d.kind === "buyback" ? "Compound " : "Swap ") + of;
+  return (d.kind === "stake" ? "Stake " : d.kind === "buyback" ? "Compound " : "Swap ") + of;
 };
 /** The stablecoins a drip can swap into with one tap (classic SPL tokens). */
 const DRIP_STABLES = [
@@ -6335,7 +6514,7 @@ function DripDetail({ row }: { row: Activity }) {
             {a.hidden ? "••••" : tokenQtyText(row.amount) + " " + row.symbol}
           </Text>
           <Text style={m.muted}>
-            {d.kind === "buyback" ? "Bought back" : "Bought"}{" "}
+            {d.kind === "stake" ? "Staked" : d.kind === "buyback" ? "Bought back" : "Bought"}{" "}
             · {a.hidden ? "••••" : usd(row.usd)}
           </Text>
         </View>
@@ -6368,17 +6547,17 @@ function DripDetail({ row }: { row: Activity }) {
             )
           : null}
         {line(
-          "Bought",
+          d.kind === "stake" ? "Staked" : "Bought",
           a.hidden ? "••••" : tokenQtyText(row.amount) + " " + row.symbol,
           () => a.nav({ type: "asset", mint: row.mint }),
         )}
-        {d.kind !== "cashout"
+        {d.kind !== "cashout" && d.kind !== "stake"
           ? line(
               "Market cap at buy",
               d.marketCap != null ? usd(d.marketCap, true) : "—",
             )
           : null}
-        {d.kind !== "cashout" && d.price != null
+        {d.kind !== "cashout" && d.kind !== "stake" && d.price != null
           ? line("Price at buy", assetPrice(d.price))
           : null}
         {line(
