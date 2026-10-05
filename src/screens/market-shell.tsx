@@ -3565,7 +3565,7 @@ const ONBOARDING_PAGES: {
   {
     icon: "ticket",
     title: "Have a referral?",
-    body: "Enjoy 0% trading fees for first month.",
+    body: "50% off trading fees for your first month, and $5 of free agent credits.",
   },
 ];
 /** Referral codes are digits: "2026" and a country's calling code. */
@@ -3619,7 +3619,8 @@ function OnboardingScreen() {
         const r = await a.action("referral", { code });
         if (!r) return; // the toast said why; the code stays for another try
         showToast(
-          "0% trading fees until " +
+          ((r as any).data.creditMicro ? "$5 of agent credits added. " : "") +
+          "50% off trading fees until " +
             new Date((r as any).data.feeFreeUntil).toLocaleDateString(
               undefined,
               {
@@ -7199,7 +7200,8 @@ function Settings() {
       const r = await a.action("referral", { code });
       if (!r) return; // the toast said why; the code stays for another try
       showToast(
-        "0% trading fees until " +
+        ((r as any).data.creditMicro ? "$5 of agent credits added. " : "") +
+          "50% off trading fees until " +
           new Date((r as any).data.feeFreeUntil).toLocaleDateString(undefined, {
             month: "short",
             day: "numeric",

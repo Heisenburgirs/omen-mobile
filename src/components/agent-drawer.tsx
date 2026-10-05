@@ -24,6 +24,8 @@ export function AgentDrawer({
   onNew,
   onPin,
   onDelete,
+  creditsUsd = 0,
+  invite,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -35,6 +37,10 @@ export function AgentDrawer({
   onNew: () => void;
   onPin: (id: string, pinned: boolean) => void;
   onDelete: (id: string) => void;
+  /** Free credits inside the balance, shown so the user knows what is theirs to withdraw. */
+  creditsUsd?: number;
+  /** The user's own code and what sharing it earns. */
+  invite?: { code: string; friends: number; youUsd: number; theyUsd: number; onShare: () => void };
 }) {
   const insets = useSafeAreaInsets();
   const window = Dimensions.get("window");
@@ -90,6 +96,24 @@ export function AgentDrawer({
           <Text numberOfLines={1} adjustsFontSizeToFit style={s.amount}>
             {hidden ? "••••" : usd(balanceUsd)}
           </Text>
+          {creditsUsd > 0.0005 && !hidden ? <Text style={s.credit}>{`${usd(creditsUsd)} free credits`}</Text> : null}
+          {invite ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Invite friends with code ${invite.code}`}
+              onPress={invite.onShare}
+              style={({ pressed }) => [s.invite, { opacity: pressed ? 0.6 : 1 }]}
+            >
+              <Icon name="ticket" size={18} color={colors.ice} />
+              <View style={{ flex: 1 }}>
+                <Text style={s.inviteTitle}>{`Invite friends · ${invite.code}`}</Text>
+                <Text style={s.inviteBody}>
+                  {`They get ${usd(invite.theyUsd)} of credits, you get ${usd(invite.youUsd)} each${invite.friends ? ` · ${invite.friends} joined` : ""}`}
+                </Text>
+              </View>
+              <Icon name="share" size={16} color={colors.muted} />
+            </Pressable>
+          ) : null}
 
           <Pressable
             accessibilityRole="button"
@@ -183,6 +207,21 @@ const s = StyleSheet.create({
     borderRightColor: colors.line,
     paddingHorizontal: 14,
   },
+  credit: { fontFamily: fonts.medium, fontSize: 13, color: colors.success, marginTop: 2 },
+  invite: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  inviteTitle: { fontFamily: fonts.bold, fontSize: 14, color: colors.ice },
+  inviteBody: { fontFamily: fonts.regular, fontSize: 12, lineHeight: 16, color: colors.muted, marginTop: 1 },
   amount: {
     fontFamily: fonts.numericBold,
     fontSize: 22,

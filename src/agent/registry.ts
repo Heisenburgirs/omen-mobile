@@ -45,6 +45,8 @@ export type AgentAccount = {
   spentUsdc: number;
   /** USDC in the agent's wallet outside the channel (a refund or a funding on its way). */
   idleUsdc: number;
+  /** Free credits OMEN gave the user, spent before their own balance. */
+  creditUsdc?: number;
 };
 export type ToolContext = {
   text: string;
@@ -123,10 +125,12 @@ export const TOOLS: Tool[] = [
       const a = ctx.agent?.();
       if (!a) return { data: "agent balance unknown right now" };
       const usd = (n: number) => n.toFixed(2);
-      if (a.state !== "open" && a.idleUsdc < 0.005) return { data: "the agent is not funded: balance 0.00 USDC. The user can fund it from the menu, Fund." };
+      const free = a.creditUsdc ?? 0;
+      if (a.state !== "open" && a.idleUsdc < 0.005 && free < 0.005) return { data: "the agent is not funded: balance 0.00 USDC. The user can fund it from the menu, Fund." };
       return {
         data: compact({
-          agentBalanceUsdc: usd((a.state === "open" ? a.availableUsdc : 0) + a.idleUsdc),
+          agentBalanceUsdc: usd((a.state === "open" ? a.availableUsdc : 0) + a.idleUsdc + free),
+          ...(free >= 0.005 ? { ofWhichFreeCreditsUsdc: usd(free), creditsNote: "Free credits are spent first and cannot be withdrawn." } : {}),
           fundedUsdc: usd(a.depositUsdc),
           spentOnRepliesUsdc: usd(a.spentUsdc),
           ...(a.idleUsdc >= 0.005 ? { onItsWayUsdc: usd(a.idleUsdc) } : {}),

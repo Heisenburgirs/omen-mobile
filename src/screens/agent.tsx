@@ -1,7 +1,9 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Animated, Image, Keyboard, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import React, { useCallback, useEffect, useRef, useState, useMemo } from "react";
+import { Animated, Image, Keyboard, Linking, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
 import { AgentMessage } from "../components/agent-message";
 import { EMPTY_REFS, type MessageRefs } from "../agent/refs";
+import { inviteMessage, type AgentCredits } from "../agent/credits";
+import { sponsoredTool, sponsoredWriter } from "../agent/credits-run";
 import { Icon, IconButton, m } from "../components/market-ui";
 import { AgentDrawer } from "../components/agent-drawer";
 import { OmenSheet } from "../components/omen-sheet";
@@ -73,7 +75,7 @@ async function copyMessage(text: string) {
 const GREETING = "What should we trade on?";
 /** The least a single deposit into the agent can be, in dollars. */
 const MIN_DEPOSIT = 5;
-const UNFUNDED = "Fund me with USDC to get started: tap $ at the top right.";
+const UNFUNDED = "Your free credits are used up. Fund me with USDC to keep going: tap $ at the top right.";
 
 type Shown = { id: number; from: "agent" | "user"; text: string; attachments?: Attachment[]; refs?: MessageRefs };
 const shown = (m: StoredMessage): Shown => ({
@@ -138,6 +140,29 @@ export function AgentScreen({
     void refreshIdle();
   }, [agent.address, refreshIdle]);
   const balance = (funded ? channel.view?.availableUsdc ?? 0 : 0) + idle;
+
+  // Free credits (a trial, a Seeker's welcome, referrals) live on the
+  // server. While there are any, the agent runs on them and the user's own
+  // channel is left alone.
+  const credits = useMobile<AgentCredits>("agent-credits", {}, Boolean(user), 60000);
+  const [creditMicro, setCreditMicro] = useState<number | null>(null);
+  const serverCredit = credits.data?.data.balanceMicro;
+  useEffect(() => {
+    if (serverCredit != null) setCreditMicro(serverCredit);
+  }, [serverCredit]);
+  const creditUsd = (creditMicro ?? 0) / 1e6;
+  const onCredits = creditUsd > 0.0005;
+  const tokenRef = useLatest(getAccessToken);
+  const sponsored = useMemo(() => {
+    const token = () => tokenRef.current();
+    return { write: sponsoredWriter(token, setCreditMicro), tool: sponsoredTool(token, setCreditMicro) };
+  }, [tokenRef]);
+  const referral = credits.data?.data.referral ?? null;
+  const rewards = credits.data?.data.rewards ?? null;
+  const invite = useCallback(() => {
+    if (!referral || !rewards) return;
+    void Share.share({ message: inviteMessage(referral.code, rewards) }).catch(() => undefined);
+  }, [referral, rewards]);
 
   // The keyboard covers the bottom of the window and nothing resizes for it
   // here, so the screen lifts its own bottom edge by however much it overlaps.
@@ -279,7 +304,7 @@ export function AgentScreen({
     const mine = await addMessage(owner, id, "user", clean, null, attachments.map(storedAttachment));
     setMessages((all) => [...all, shown(mine)]);
     void touchConversation(id).then(reloadConversations);
-    if (!funded) {
+    if (!funded && !onCredits) {
       agentSays(UNFUNDED);
       return;
     }
@@ -314,8 +339,8 @@ export function AgentScreen({
             return once();
           }
         }) as Fetcher,
-        write: channel.write,
-        ...(funded ? { paid: channel.tool } : {}),
+        write: onCredits ? sponsored.write : channel.write,
+        ...(onCredits ? { paid: sponsored.tool } : funded ? { paid: channel.tool } : {}),
         ...(token ? { post: (async (resource: string, body: unknown) => mobileFetch(resource, {}, token, undefined, "POST", body)) as NonNullable<Parameters<typeof runTurn>[0]["post"]> } : {}),
         agent: () => ({
           state: channel.view?.state ?? "none",
@@ -323,6 +348,7 @@ export function AgentScreen({
           depositUsdc: channel.view?.depositUsdc ?? 0,
           spentUsdc: channel.view?.spentUsdc ?? 0,
           idleUsdc: idle,
+          creditUsdc: creditUsd,
         }),
         onRemembered: () => showToast("Noted for next time"),
         onStatus: setStatus,
@@ -550,7 +576,11 @@ export function AgentScreen({
       <AgentDrawer
         visible={drawer}
         onClose={closeDrawer}
-        balanceUsd={balance + pendingFund}
+        balanceUsd={balance + pendingFund + creditUsd}
+        creditsUsd={creditUsd}
+        {...(referral && rewards
+          ? { invite: { code: referral.code, friends: referral.uses, youUsd: rewards.referrerMicro / 1e6, theyUsd: rewards.refereeMicro / 1e6, onShare: invite } }
+          : {})}
         hidden={hidden}
         conversations={conversations}
         currentId={conversationId}

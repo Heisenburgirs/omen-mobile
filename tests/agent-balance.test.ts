@@ -52,3 +52,16 @@ test("the judge tier turns a model's default reasoning off so the budget goes to
   assert.ok(MODELS.judge.maxTokens >= 1000);
   assert.equal(MODELS.chat.reasoning, undefined);
 });
+
+test("free credits count in the agent's balance and an invite says what the friend gets", async () => {
+  const { inviteMessage } = await import("../src/agent/credits");
+  const msg = inviteMessage("1234567", { refereeMicro: 5_000_000, referrerMicro: 2_000_000, seekerMicro: 5_000_000, feeDiscountBps: 5000 });
+  assert.match(msg, /code 1234567/);
+  assert.match(msg, /\$5 of free agent credits/);
+  assert.match(msg, /50% off trading fees/);
+  const tool = toolById("agent_balance")!;
+  const ctx = { text: "what is my agent balance", agent: () => ({ state: "none", availableUsdc: 0, depositUsdc: 0, spentUsdc: 0, idleUsdc: 0, creditUsdc: 4.2 }) } as unknown as ToolContext;
+  const out = await tool.run(ctx);
+  assert.match(out.data, /"agentBalanceUsdc":"4.20"/);
+  assert.match(out.data, /"ofWhichFreeCreditsUsdc":"4.20"/);
+});
