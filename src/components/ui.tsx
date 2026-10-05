@@ -159,9 +159,9 @@ const s = StyleSheet.create({
     color: colors.ice,
   },
   button: {
-    minHeight: 56,
-    paddingHorizontal: 18,
-    paddingVertical: 16,
+    minHeight: 48,
+    paddingHorizontal: 32,
+    paddingVertical: 8,
     borderRadius: 28,
     overflow: "hidden",
     backgroundColor: colors.cash,
@@ -171,7 +171,7 @@ const s = StyleSheet.create({
     borderColor: "transparent",
   },
   secondary: { backgroundColor: colors.surfaceRaised },
-  buttonText: { fontFamily: fonts.bold, fontSize: 17, color: colors.ice },
+  buttonText: { fontFamily: fonts.bold, fontSize: 18, color: colors.ice },
   focus: { borderColor: colors.focus },
   notice: {
     fontFamily: fonts.regular,

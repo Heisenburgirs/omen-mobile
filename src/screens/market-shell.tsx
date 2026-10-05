@@ -903,7 +903,7 @@ function Home({ active }: { active: boolean }) {
             <Icon name="copy" size={16} color={colors.muted} />
           </Pressable>
         </View>
-        <View style={{ gap: 18 }}>
+        <View style={{ gap: 28 }}>
           <View style={{ minWidth: 0, gap: 2 }}>
             <View style={[m.row, { gap: 0 }]}>
               {!p && a.positions.isPending ? (
@@ -975,7 +975,7 @@ function Home({ active }: { active: boolean }) {
               )}
             </View>
           </View>
-          <View style={[m.row, { gap: 10 }]}>
+          <View style={[m.row, { gap: 16 }]}>
             {(
               [
                 ["Deposit", "Deposit assets", "receive"],
@@ -7888,8 +7888,8 @@ function PeopleList({
 const s = StyleSheet.create({
   balanceCard: {
     gap: 6,
-    padding: 20,
-    borderRadius: 24,
+    padding: 16,
+    borderRadius: 16,
     backgroundColor: colors.card,
     marginBottom: -4,
   },
@@ -7909,11 +7909,11 @@ const s = StyleSheet.create({
     padding: 12,
     gap: 6,
   },
-  moveText: { fontFamily: fonts.bold, fontSize: 16, color: colors.ice },
+  moveText: { fontFamily: fonts.bold, fontSize: 18, color: colors.ice },
   moveButton: {
     flex: 1,
-    height: 52,
-    borderRadius: 26,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: colors.surfaceRaised,
     alignItems: "center",
     justifyContent: "center",
@@ -7926,8 +7926,8 @@ const s = StyleSheet.create({
   // even "$100,000.00" ran into them and leant on adjustsFontSizeToFit.
   balance: {
     fontFamily: fonts.numericBold,
-    fontSize: 40,
-    letterSpacing: -1,
+    fontSize: 42,
+    letterSpacing: -0.25,
     color: colors.ice,
     lineHeight: 48,
     fontVariant: ["tabular-nums"],
@@ -7936,8 +7936,8 @@ const s = StyleSheet.create({
   tradeBar: { flexDirection: "row", alignItems: "flex-end", gap: 10 },
   tradeButton: {
     flex: 1,
-    minHeight: 52,
-    borderRadius: 26,
+    minHeight: 48,
+    borderRadius: 24,
     overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",

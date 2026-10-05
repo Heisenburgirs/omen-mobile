@@ -13,24 +13,27 @@ export const tradingColors = {
   canvas: "#000000",
   // Tiles: one flat step above the ground. Their edge is their own colour,
   // so a bordered panel reads as borderless.
-  card: "#161616",
-  cardLine: "#161616",
+  card: "#171717",
+  cardLine: "#171717",
   // Pills, chips and fields that sit on a tile or on the ground.
   surface: "#1F1F1F",
   surfaceRaised: "#262626",
   /** A selected pill, tab or toggle. */
   selected: "#333333",
   ice: "#FFFFFF",
-  mist: "#D4D4D4",
-  muted: "#8A8A8A",
+  // The file's greys: Gray 4 and Gray 3 for secondary text, Gray 2 for an
+  // unselected tab or key.
+  mist: "#C0C0C0",
+  muted: "#9D9D9D",
+  faint: "#686868",
   line: "#242424",
   focus: "#FFFFFF",
   /** The one green: the primary action, and cash. */
-  accent: "#00D632",
-  success: "#00D632",
+  accent: "#01D651",
+  success: "#01D651",
   // Links in the agent's replies: a ticker that opens its page, a handle that opens X.
   link: "#6EA8FF",
-  cash: "#00D632",
+  cash: "#01D651",
   error: "#FF4F5E",
 };
 // The original navy palette is retired: every screen (welcome, sign-in,
@@ -52,11 +55,11 @@ export const space = {
   sm: 8,
   md: 12,
   lg: 16,
-  edge: 24,
-  section: 24,
+  edge: 20,
+  section: 20,
   xl: 32,
 };
-export const radius = { small: 12, field: 26, panel: 24, pill: 999 };
+export const radius = { small: 12, field: 24, panel: 16, pill: 999 };
 
 /**
  * The agent conversation: Inter, whose plain figures and open shapes keep

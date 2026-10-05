@@ -57,7 +57,7 @@ export function RaisedButton({
 const s = StyleSheet.create({
   // The primary action is the one green pill; the quiet one is grey.
   button: {
-    minHeight: 52,
+    minHeight: 48,
     paddingHorizontal: 18,
     paddingVertical: 10,
     borderRadius: 26,
@@ -71,7 +71,7 @@ const s = StyleSheet.create({
   label: {
     fontFamily: fonts.bold,
     color: colors.ice,
-    fontSize: 16,
+    fontSize: 18,
     flexShrink: 1,
     textAlign: "center",
   },

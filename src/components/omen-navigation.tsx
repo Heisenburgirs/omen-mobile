@@ -48,21 +48,7 @@ export function OmenNavigation({
     V40 Q${width} 64 ${width - 24} 64
     H24 Q0 64 0 40 V32 Q0 8 24 8 Z`;
   return (
-    <View style={[s.bar, { width }]}>
-      <Svg
-        pointerEvents="none"
-        accessible={false}
-        width={width}
-        height={66}
-        style={StyleSheet.absoluteFill}
-      >
-        <Path
-          d={outline}
-          fill={colors.card}
-          stroke={colors.card}
-          strokeWidth={1}
-        />
-      </Svg>
+    <View style={s.bar}>
       {OMEN_TABS.map((tab) => {
         const active = selected === tab;
         const center = false;
@@ -75,7 +61,6 @@ export function OmenNavigation({
             onPress={() => onSelect(tab)}
             style={({ pressed }) => [s.item, { opacity: pressed ? 0.55 : 1 }]}
           >
-            {active && !center ? <View style={s.activeFill} /> : null}
             <View style={s.glyph}>
               {center ? (
                 <Image
@@ -93,15 +78,15 @@ export function OmenNavigation({
               ) : (
                 <Icon
                   name={icons[tab]!}
-                  size={20}
-                  color={active ? colors.ice : colors.muted}
+                  size={24}
+                  color={active ? colors.ice : colors.faint}
                 />
               )}
             </View>
             {/* Every destination is named: a one-word label under the icon. */}
             <Text
               numberOfLines={1}
-              style={[s.label, { color: active ? colors.ice : colors.muted }]}
+              style={[s.label, { color: active ? colors.ice : colors.faint }]}
             >
               {labels[tab] ?? tab}
             </Text>
@@ -113,18 +98,16 @@ export function OmenNavigation({
 }
 const s = StyleSheet.create({
   bar: {
-    height: 66,
+    height: 62,
     flexDirection: "row",
-    alignSelf: "center",
-    paddingHorizontal: 10,
-    marginTop: 4,
-    marginBottom: 10,
+    paddingHorizontal: 16,
+    backgroundColor: colors.canvas,
   },
   item: {
     flex: 1,
     minWidth: 44,
-    height: 66,
-    paddingTop: 8,
+    height: 62,
+    paddingTop: 4,
     gap: 3,
     alignItems: "center",
     justifyContent: "center",
