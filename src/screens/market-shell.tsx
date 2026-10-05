@@ -279,6 +279,7 @@ function Page({
 }
 export function MarketShell(props: MarketShellProps) {
   const { user, getAccessToken } = usePrivy();
+  const queryClient = useQueryClient();
   // A visitor (web, before sign-in) gets the market: search, token pages and
   // charts are public. Anything that needs an account asks them to sign in.
   const guest = !props.address;
@@ -517,11 +518,19 @@ export function MarketShell(props: MarketShellProps) {
     }
   };
   const star = async (mint: string) => {
-    await action(
+    queryClient.setQueryData(["mobile", user?.id, "watchlist", {}], (old: any) =>
+      old?.data
+        ? { ...old, data: old.data.includes(mint) ? old.data.filter((x: string) => x !== mint) : [...old.data, mint] }
+        : old,
+    );
+    const had = watches.data?.data.includes(mint);
+    const saved = await action(
       "watchlist",
       { mint },
-      watches.data?.data.includes(mint) ? "DELETE" : "POST",
+      had ? "DELETE" : "POST",
     );
+    // A save that failed puts the list back as the server has it.
+    if (!saved) void watches.refetch();
   };
   if (gate === "wait") return <LaunchScreen />;
   return (
@@ -722,6 +731,7 @@ function Home({ active }: { active: boolean }) {
     },
     active && hasWatch,
     10000,
+    { keepPrevious: true },
   );
   // Trending and Best are not shown on Home any more; their lists are not
   // fetched either (the queries stay for the day they come back).

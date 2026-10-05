@@ -1431,7 +1431,7 @@ export function TabFade({
     progress.setValue(0);
     const motion = Animated.timing(progress, {
       toValue: 1,
-      duration: 200,
+      duration: 110,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     });
