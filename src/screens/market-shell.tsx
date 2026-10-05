@@ -987,7 +987,9 @@ function Home({ active }: { active: boolean }) {
             </View>
           </View>
           <View style={[m.row, { gap: 16, marginTop: 1 }]}>
-            {(
+            {!p && a.positions.isPending ? (
+              <Skeleton height={46} width={109} radius={BUTTON_RADIUS} />
+            ) : (
               [["Deposit", "Deposit assets", "receive"]] as const
             ).map(([title, label, route]) => (
               <Pressable
