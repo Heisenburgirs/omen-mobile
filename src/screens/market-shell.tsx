@@ -7971,7 +7971,7 @@ const s = StyleSheet.create({
     justifyContent: "center",
   },
   assetTile: {
-    backgroundColor: "#0D1019",
+    backgroundColor: "#131829",
     borderRadius: 12,
     padding: 12,
     gap: 6,
@@ -8061,7 +8061,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 22,
-    backgroundColor: "#12161F",
+    backgroundColor: "#151A2B",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.06)",
     elevation: 10,

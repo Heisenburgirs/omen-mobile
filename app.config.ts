@@ -23,7 +23,7 @@ const config: ExpoConfig = {
     versionCode: buildNumber,
     adaptiveIcon: {
       foregroundImage: "./assets/omen-adaptive-icon.png",
-      backgroundColor: "#06080F",
+      backgroundColor: "#0A0D18",
     },
     blockedPermissions: [
       "android.permission.READ_MEDIA_IMAGES",
@@ -38,8 +38,8 @@ const config: ExpoConfig = {
     output: "single",
     name: "OMEN",
     shortName: "OMEN",
-    backgroundColor: "#06080F",
-    themeColor: "#06080F",
+    backgroundColor: "#0A0D18",
+    themeColor: "#0A0D18",
   },
   experiments: { baseUrl: "/app" },
   plugins: [
@@ -47,7 +47,7 @@ const config: ExpoConfig = {
     [
       "expo-splash-screen",
       {
-        backgroundColor: "#06080F",
+        backgroundColor: "#0A0D18",
         image: "./assets/omen-mark.png",
         imageWidth: 240,
         resizeMode: "contain",

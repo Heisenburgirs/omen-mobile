@@ -10,30 +10,30 @@ export const fonts = {
 // actions and one green for the action that moves money. Nothing is
 // outlined, nothing shines; size and weight carry the hierarchy.
 export const tradingColors = {
-  canvas: "#06080F",
+  canvas: "#0A0D18",
   // No tiles: a card is the ground itself, so content sits on black and
   // space does the grouping.
-  card: "#06080F",
-  cardLine: "#06080F",
+  card: "#0A0D18",
+  cardLine: "#0A0D18",
   // Pills, chips and fields that sit on a tile or on the ground.
-  surface: "#111522",
-  surfaceRaised: "#181D2C",
+  surface: "#161B2C",
+  surfaceRaised: "#1D2337",
   /** A selected pill, tab or toggle. */
-  selected: "#1E2A4D",
+  selected: "#263052",
   ice: "#FFFFFF",
   // The file's greys: Gray 4 and Gray 3 for secondary text, Gray 2 for an
   // unselected tab or key.
   mist: "#C3C8D6",
   muted: "#8F95A8",
   faint: "#5E6578",
-  line: "#1B2030",
+  line: "#20263A",
   focus: "#8FA6FF",
   /** The one green: the primary action, and cash. */
   /** The brand's blue (the landing page's), for a selected state or an accent that is not money. */
   accent: "#4A64FF",
   success: "#01D651",
   // Links in the agent's replies: a ticker that opens its page, a handle that opens X.
-  link: "#8FA6FF",
+  link: "#B9C4F0",
   cash: "#01D651",
   error: "#FF4F5E",
 };

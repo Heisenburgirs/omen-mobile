@@ -108,7 +108,7 @@ export function AgentDrawer({
                 onPress={invite.onShare}
                 style={({ pressed }) => ({ width: 40, height: 40, alignItems: "center", justifyContent: "center", opacity: pressed ? 0.5 : 1 })}
               >
-                <Icon name="invite" size={22} color={colors.accent} />
+                <Icon name="invite" size={22} color={colors.ice} />
               </Pressable>
             ) : null}
           </View>
