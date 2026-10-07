@@ -4148,7 +4148,7 @@ function ProfileScreen({ id, active }: { id?: string; active: boolean }) {
             </View>
             {section === "Portfolio" ? (
               <PortfolioContent
-                address={p.wallet}
+                address={own ? a.scope : p.wallet}
                 active={active}
                 hidden={hide}
               />

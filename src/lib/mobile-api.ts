@@ -109,6 +109,15 @@ export function usePrefetchMobile() {
     });
   };
 }
+/** The resources an action can change; an action not listed refreshes everything. */
+const TOUCHES: Record<string, string[]> = {
+  watchlist: ["watchlist", "assets"],
+  strategies: ["strategies", "portfolio"],
+  referral: ["me", "agent-credits"],
+  profile: ["me", "people", "profile"],
+  follow: ["me", "profile", "people", "relations"],
+  block: ["me", "profile", "people", "blocked"],
+};
 export function useMobileAction() {
   const { getAccessToken } = usePrivy();
   const client = useQueryClient();
@@ -121,7 +130,14 @@ export function useMobileAction() {
       method,
       body,
     );
-    void client.invalidateQueries({ queryKey: ["mobile"] });
+    // Only what the action can have changed is fetched again; a star does
+    // not send the portfolio, the wallets and every list back to the server.
+    const touched = TOUCHES[resource];
+    void client.invalidateQueries(
+      touched
+        ? { predicate: (q) => q.queryKey[0] === "mobile" && touched.includes(String(q.queryKey[2])) }
+        : { queryKey: ["mobile"] },
+    );
     return result;
   };
 }
