@@ -23,7 +23,7 @@ const config: ExpoConfig = {
     versionCode: buildNumber,
     adaptiveIcon: {
       foregroundImage: "./assets/omen-adaptive-icon.png",
-      backgroundColor: "#070A14",
+      backgroundColor: "#050609",
     },
     blockedPermissions: [
       "android.permission.READ_MEDIA_IMAGES",

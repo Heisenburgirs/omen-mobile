@@ -10,11 +10,11 @@ export const fonts = {
 // actions and one green for the action that moves money. Nothing is
 // outlined, nothing shines; size and weight carry the hierarchy.
 export const tradingColors = {
-  canvas: "#070A14",
+  canvas: "#050609",
   // No tiles: a card is the ground itself, so content sits on black and
   // space does the grouping.
-  card: "#070A14",
-  cardLine: "#070A14",
+  card: "#050609",
+  cardLine: "#050609",
   // Pills, chips and fields that sit on a tile or on the ground.
   surface: "#111627",
   surfaceRaised: "#171D31",
@@ -61,6 +61,12 @@ export const space = {
   xl: 32,
 };
 export const radius = { small: 12, field: 24, panel: 16, pill: 999 };
+/** The blue card: the brand's blue as a gradient, bright at the top left and deep at the foot, on the black ground. */
+export const blueCard = {
+  colors: ["#1D5BB8", "#0E3479", "#071A42"] as [string, string, string],
+  start: { x: 0, y: 0 },
+  end: { x: 1, y: 1 },
+};
 
 /**
  * The agent conversation: Inter, whose plain figures and open shapes keep

@@ -121,6 +121,7 @@ import { playSound, preloadSounds } from "../lib/sound";
 import { LinearGradient } from "expo-linear-gradient";
 import { BUTTON_RADIUS, Gloss, raised, raisedQuiet } from "../components/gloss";
 import { motion } from "../lib/motion";
+import { blueCard } from "../theme";
 import { keys } from "../lib/queries";
 import { InviteSheet } from "../components/invite-sheet";
 // The saved chart timeframe and style are ready before any token page opens.
@@ -828,6 +829,7 @@ function Home({ active }: { active: boolean }) {
             },
           ]}
         >
+          <LinearGradient pointerEvents="none" colors={blueCard.colors} start={blueCard.start} end={blueCard.end} style={StyleSheet.absoluteFill} />
           <View style={[m.row, { gap: 6, height: 20 }]}>
             <AssetIcon asset={asset} size={20} />
             <Text
@@ -885,7 +887,7 @@ function Home({ active }: { active: boolean }) {
   );
   return (
     <Page refresh={refresh}>
-      <View style={s.balanceCard}>
+      <LinearGradient colors={blueCard.colors} start={blueCard.start} end={blueCard.end} style={s.balanceCard}>
         {/* Who this is: the picture and name over the balance, and the
             address copied from the button beside them. 32 px, loaded or not. */}
         <View style={[m.row, { gap: 10, height: 32, marginBottom: 6 }]}>
@@ -1014,7 +1016,7 @@ function Home({ active }: { active: boolean }) {
         ) : a.positions.data?.coverage === "partial" ? (
           <Text style={m.label}>Estimated balance</Text>
         ) : null}
-      </View>
+      </LinearGradient>
       {/* Home is the user's own things: what they watch, then what they hold.
           The Best APY and Top Stonks rankings are hidden for now (2026-09-17);
           Search still ranks everything. */}
@@ -2817,10 +2819,14 @@ function AssetScreen({ mint, active }: { mint: string; active: boolean }) {
                 </View>
               </View>
               {/* A visitor holds nothing yet: the card would only ever say $0. */}
-              <View
+              <LinearGradient
+                colors={blueCard.colors}
+                start={blueCard.start}
+                end={blueCard.end}
                 style={[
                   m.panel,
                   m.between,
+                  s.blueCard,
                   {
                     alignItems: "flex-end",
                     display: a.guest ? "none" : "flex",
@@ -2876,7 +2882,7 @@ function AssetScreen({ mint, active }: { mint: string; active: boolean }) {
                             usd(Math.abs(unrealized)))}
                   </Text>
                 </View>
-              </View>
+              </LinearGradient>
               {mint === SKR_MINT ? (
                 <SkrStakeCard
                   active={active}
@@ -7957,10 +7963,12 @@ function PeopleList({
   );
 }
 const s = StyleSheet.create({
+  blueCard: { padding: 18, borderRadius: 22, overflow: "hidden" },
   balanceCard: {
     gap: 6,
-    paddingTop: 4,
-    marginBottom: -4,
+    padding: 18,
+    borderRadius: 22,
+    overflow: "hidden",
   },
   currency: {
     backgroundColor: colors.surface,
@@ -7972,7 +7980,8 @@ const s = StyleSheet.create({
   },
   assetTile: {
     backgroundColor: "#0F1423",
-    borderRadius: 12,
+    borderRadius: 14,
+    overflow: "hidden",
     padding: 12,
     gap: 6,
   },
