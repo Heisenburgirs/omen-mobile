@@ -7971,7 +7971,7 @@ const s = StyleSheet.create({
     justifyContent: "center",
   },
   assetTile: {
-    backgroundColor: "#111933",
+    backgroundColor: "#0D1429",
     borderRadius: 14,
     overflow: "hidden",
     padding: 12,
@@ -8062,7 +8062,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 22,
-    backgroundColor: "#0F172F",
+    backgroundColor: "#0C1327",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.06)",
     elevation: 10,
