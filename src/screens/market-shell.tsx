@@ -906,7 +906,7 @@ function Home({ active }: { active: boolean }) {
             </Pressable>
           ) : (
             <>
-              <Skeleton height={28} width={28} radius={14} />
+              <View style={{ width: 28, height: 28 }} />
               <Skeleton height={14} width={110} />
             </>
           )}
@@ -2991,7 +2991,7 @@ function AssetScreen({ mint, active }: { mint: string; active: boolean }) {
                   ]}
                 >
                   <View style={[m.row, { gap: 6, height: 22 }]}>
-                    <Skeleton height={16} circle />
+                    <View style={{ width: 16, height: 16 }} />
                     <Skeleton height={16} width={90} />
                   </View>
                   <View style={[m.row, { gap: 8, height: 28 }]}>
@@ -5372,24 +5372,16 @@ function CashScreen({ active }: { active: boolean }) {
   const p: Portfolio | undefined = a.positions.data?.data;
   const cash = (p?.holdings ?? []).filter((h) => isCash(h.asset.mint)).reduce((sum, h) => sum + Number(h.valueUsd ?? 0), 0);
   const q = useMobile<Activity[]>("activity", { address: a.scope }, active && !a.guest && Boolean(a.scope));
-  // Only what moved cash, told from cash's side: in or out, and why.
+  // Cash coming in and going out: deposits and withdrawals of dollars, and
+  // the agent being funded or paying back. Trades are the tokens' story.
   const rows = (q.data?.data ?? []).flatMap((r) => {
-    const cashRow = isCash(r.mint);
+    if (!isCash(r.mint) || (r.kind !== "deposit" && r.kind !== "withdrawal")) return [];
     const line =
-      r.kind === "deposit" && cashRow
-        ? { title: "Added cash", sign: 1 }
-        : r.kind === "withdrawal" && cashRow
-          ? { title: "Cashed out", sign: -1 }
-          : r.kind === "buy" && !cashRow
-            ? { title: "Bought " + r.symbol, sign: -1 }
-            : r.kind === "sell" && !cashRow
-              ? { title: "Sold " + r.symbol, sign: 1 }
-              : r.kind === "dividend" && cashRow
-                ? { title: "Dividend" + (r.sourceSymbol ? " from " + r.sourceSymbol : ""), sign: 1 }
-                : r.kind === "drip" && r.drip?.kind === "cashout"
-                  ? { title: "Dividends to cash", sign: 1 }
-                  : null;
-    return line && r.usd != null ? [{ ...line, id: r.id, usd: Math.abs(Number(r.usd)), at: r.timestamp }] : [];
+      r.kind === "deposit"
+        ? { title: r.agent ? "Back from the agent" : "Added cash", sign: 1 }
+        : { title: r.agent ? "Funded the agent" : "Cashed out", sign: -1 };
+    const dollars = r.usd != null ? Math.abs(Number(r.usd)) : Number(r.amount);
+    return Number.isFinite(dollars) ? [{ ...line, id: r.id, usd: dollars, at: r.timestamp }] : [];
   });
   return (
     <Page compact refresh={() => Promise.all([a.positions.refetch(), q.refetch()])}>
@@ -5644,7 +5636,6 @@ function DripSheet({ subject, onClose }: { subject: DripSubject | null; onClose:
         ) : (
           <>
             {option("compound", "Auto-compound", "Buy more $" + subject.symbol)}
-            {subject.payout === SKR_MINT ? option("stake", "Stake", "Earn more SKR with Solana Mobile's Guardian") : null}
             {option("swap", "Swap", "Into a stablecoin or any asset")}
             {pick === "swap" ? (
               <View style={{ gap: 8 }}>
@@ -6105,9 +6096,6 @@ function DripScreen({
           )}
           {kind === "drip-from"
             ? option("buyback", "Compound", "Reinvest into $" + symbol)
-            : null}
-          {payout === SKR_MINT
-            ? option("stake", "Stake", "Earn more SKR with Solana Mobile's Guardian")
             : null}
           {option("other", "Swap", "Any asset, stablecoins included")}
           {choice === "other" ? (

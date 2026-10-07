@@ -133,6 +133,8 @@ export type Activity = {
   /** The source token's symbol, when the source is known. */
   sourceSymbol?: string | null;
   sourceEvidence: string | null;
+  /** True when the other side was the user's own agent wallet. */
+  agent?: boolean;
   profile?: Profile;
   /** A DRIP swap: what the dividends became, and what they were. */
   drip?: DripRecord;

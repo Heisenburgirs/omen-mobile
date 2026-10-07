@@ -531,7 +531,7 @@ export function SkeletonRows({
           key={i}
           style={[m.row, { minHeight: plain ? 60 : 64, paddingVertical: 8 }]}
         >
-          <Skeleton height={plain ? 38 : 42} circle />
+          <View style={{ width: plain ? 38 : 42, height: plain ? 38 : 42 }} />
           <View style={{ flex: 1, gap: 6 }}>
             <Skeleton height={14} width="38%" />
             <Skeleton height={11} width="56%" />
@@ -573,7 +573,7 @@ export function SkeletonTiles({
           }}
         >
           <View style={[m.row, { gap: 6, height: 20 }]}>
-            <Skeleton height={20} circle />
+            <View style={{ width: 20, height: 20 }} />
             <Skeleton height={12} width={52} />
             <View style={{ flex: 1 }} />
             <Skeleton height={11} width={54} />
