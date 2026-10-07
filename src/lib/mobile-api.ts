@@ -1,4 +1,6 @@
-import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo } from "react";
+import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { keys, policyFor, TOUCHES } from "./queries";
 import { usePrivy } from "./privy";
 import { config } from "../config";
 import type { Envelope } from "../domain/models";
@@ -53,36 +55,38 @@ export async function mobileFetch<T>(
  * can browse these; everything else waits for an account.
  */
 export const PUBLIC_RESOURCES = ["assets", "asset", "stats", "candles"];
+const ready = (user: unknown, resource: string) => Boolean(user) || PUBLIC_RESOURCES.includes(resource);
+/**
+ * One request's answer, kept as `queries.ts` says for its resource: how
+ * often it refreshes on screen, how long it is fresh, whether the previous
+ * answer stays up while new params load, whether it is saved for the next
+ * launch. `interval` and `options` override that for one call.
+ */
 export function useMobile<T>(
   resource: string,
   params: Record<string, string> = {},
   enabled = true,
-  interval = 20000,
+  interval?: number,
   options: {
-    /**
-     * Keep showing the last result while a changed request loads, e.g. the
-     * chart of the previous timeframe, so the layout never collapses to a
-     * placeholder between two views of the same thing.
-     */
+    /** Keep showing the last result while a changed request loads. */
     keepPrevious?: boolean;
-    /**
-     * What to show until the first result arrives, e.g. the token as the list
-     * that was tapped already knows it, so the page opens with content.
-     */
+    /** What to show until the first result arrives. */
     placeholder?: Envelope<T>;
   } = {},
 ) {
   const { user, getAccessToken } = usePrivy();
+  const policy = policyFor(resource);
   return useQuery({
-    queryKey: ["mobile", user?.id, resource, params],
+    queryKey: keys.query(user?.id, resource, params),
     queryFn: async ({ signal }) =>
       mobileFetch<T>(resource, params, user ? await getAccessToken() : null, signal),
-    enabled: enabled && (Boolean(user) || PUBLIC_RESOURCES.includes(resource)),
-    refetchInterval: interval || false,
+    enabled: enabled && ready(user, resource),
+    staleTime: policy.stale,
+    refetchInterval: (interval ?? policy.interval) || false,
     refetchIntervalInBackground: false,
     placeholderData: options.placeholder
       ? options.placeholder
-      : options.keepPrevious
+      : (options.keepPrevious ?? policy.keep)
         ? keepPreviousData
         : undefined,
     retry: (count, e) =>
@@ -93,6 +97,80 @@ export function useMobile<T>(
   });
 }
 /**
+ * A list that pages with a cursor (search results, history): every page
+ * fetched so far, flattened and de-duplicated, with the next one a call
+ * away. Pages are cached together under one key, so coming back to a list
+ * shows all of it at once.
+ */
+export function useMobilePages<T>(
+  resource: string,
+  params: Record<string, string>,
+  enabled: boolean,
+  options: {
+    /** What makes a row the same row across pages. */
+    id: (row: T) => string;
+    /** The cursor of the first page (the backend's "0" or ""). */
+    first?: string;
+  },
+) {
+  const { user, getAccessToken } = usePrivy();
+  const policy = policyFor(resource);
+  const first = options.first ?? "";
+  const q = useInfiniteQuery({
+    queryKey: keys.query(user?.id, resource, params),
+    queryFn: async ({ signal, pageParam }) =>
+      mobileFetch<T[]>(
+        resource,
+        { ...params, ...(pageParam && pageParam !== first ? { cursor: pageParam } : {}) },
+        user ? await getAccessToken() : null,
+        signal,
+      ),
+    initialPageParam: first,
+    getNextPageParam: (last) => (last.nextCursor && last.nextCursor !== first ? last.nextCursor : undefined),
+    enabled: enabled && ready(user, resource),
+    staleTime: policy.stale,
+    // Polling refetches only the first page (the newest rows); later pages
+    // are refetched on demand.
+    refetchInterval: policy.interval || false,
+    refetchIntervalInBackground: false,
+    placeholderData: policy.keep ? keepPreviousData : undefined,
+    retry: (count, e) =>
+      count < 1 &&
+      !(
+        e instanceof MobileError && [400, 401, 403, 404, 503].includes(e.status)
+      ),
+  });
+  const rows = useMemo(() => {
+    const seen = new Set<string>();
+    const out: T[] = [];
+    for (const page of q.data?.pages ?? [])
+      for (const row of page.data) {
+        const id = options.id(row);
+        if (seen.has(id)) continue;
+        seen.add(id);
+        out.push(row);
+      }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q.data]);
+  return {
+    rows,
+    /** The first page's envelope, for anything that reads beyond the rows. */
+    data: q.data?.pages[0],
+    pageCount: q.data?.pages.length ?? 0,
+    hasNext: Boolean(q.hasNextPage),
+    fetchNext: () => {
+      if (q.hasNextPage && !q.isFetchingNextPage) void q.fetchNextPage();
+    },
+    isFetchingNext: q.isFetchingNextPage,
+    isPending: q.isPending,
+    isFetching: q.isFetching,
+    isError: q.isError,
+    isPlaceholderData: q.isPlaceholderData,
+    refetch: () => q.refetch(),
+  };
+}
+/**
  * Warms the cache for a request the user is likely to make next (the other
  * chart timeframes, say), under the same key `useMobile` will read.
  */
@@ -100,24 +178,38 @@ export function usePrefetchMobile() {
   const { user, getAccessToken } = usePrivy();
   const client = useQueryClient();
   return (resource: string, params: Record<string, string> = {}, staleMs = 10000) => {
-    if (!user && !PUBLIC_RESOURCES.includes(resource)) return;
+    if (!ready(user, resource)) return;
     void client.prefetchQuery({
-      queryKey: ["mobile", user?.id, resource, params],
+      queryKey: keys.query(user?.id, resource, params),
       queryFn: async ({ signal }) =>
         mobileFetch(resource, params, user ? await getAccessToken() : null, signal),
       staleTime: staleMs,
     });
   };
 }
-/** The resources an action can change; an action not listed refreshes everything. */
-const TOUCHES: Record<string, string[]> = {
-  watchlist: ["watchlist", "assets"],
-  strategies: ["strategies", "portfolio"],
-  referral: ["me", "agent-credits"],
-  profile: ["me", "people", "profile"],
-  follow: ["me", "profile", "people", "relations"],
-  block: ["me", "profile", "people", "blocked"],
-};
+/** Warms a paged list's first page, under the key `useMobilePages` will read. */
+export function usePrefetchMobilePages() {
+  const { user, getAccessToken } = usePrivy();
+  const client = useQueryClient();
+  return (resource: string, params: Record<string, string>, first = "", staleMs = 10000) => {
+    if (!ready(user, resource)) return;
+    void client.prefetchInfiniteQuery({
+      queryKey: keys.query(user?.id, resource, params),
+      queryFn: async ({ signal }) => mobileFetch(resource, params, user ? await getAccessToken() : null, signal),
+      initialPageParam: first,
+      staleTime: staleMs,
+    });
+  };
+}
+/** Refreshes what an action changed: its listed resources, or everything for one not listed. */
+export function invalidateTouched(client: QueryClient, resource: string) {
+  const touched = TOUCHES[resource];
+  return client.invalidateQueries(
+    touched
+      ? { predicate: (q) => q.queryKey[0] === "mobile" && touched.includes(String(q.queryKey[2])) }
+      : { queryKey: keys.all },
+  );
+}
 export function useMobileAction() {
   const { getAccessToken } = usePrivy();
   const client = useQueryClient();
@@ -132,12 +224,47 @@ export function useMobileAction() {
     );
     // Only what the action can have changed is fetched again; a star does
     // not send the portfolio, the wallets and every list back to the server.
-    const touched = TOUCHES[resource];
-    void client.invalidateQueries(
-      touched
-        ? { predicate: (q) => q.queryKey[0] === "mobile" && touched.includes(String(q.queryKey[2])) }
-        : { queryKey: ["mobile"] },
-    );
+    void invalidateTouched(client, resource);
     return result;
   };
+}
+/**
+ * An action that shows its result before the server answers: `optimistic`
+ * rewrites the cached answers it affects at once (each returns the previous
+ * value), the request goes out, and on failure the previous values go back.
+ * On either outcome the resources the action touches are refetched.
+ */
+export function useMobileMutation<TBody = unknown, TResult = unknown>(
+  resource: string,
+  options: {
+    method?: string | ((body: TBody) => string);
+    /** Cached answers to rewrite at once; returns the keys and values to restore on failure. */
+    optimistic?: (client: QueryClient, userId: string | undefined, body: TBody) => { key: readonly unknown[]; previous: unknown }[];
+    onError?: (error: unknown, body: TBody) => void;
+    onSuccess?: (result: Envelope<TResult>, body: TBody) => void;
+  } = {},
+) {
+  const { user, getAccessToken } = usePrivy();
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: TBody) =>
+      mobileFetch<TResult>(
+        resource,
+        {},
+        await getAccessToken(),
+        undefined,
+        typeof options.method === "function" ? options.method(body) : (options.method ?? "POST"),
+        body,
+      ),
+    onMutate: async (body) => {
+      const snapshots = options.optimistic?.(client, user?.id, body) ?? [];
+      return { snapshots };
+    },
+    onError: (error, body, context) => {
+      for (const s of context?.snapshots ?? []) client.setQueryData(s.key, s.previous);
+      options.onError?.(error, body);
+    },
+    onSuccess: (result, body) => options.onSuccess?.(result, body),
+    onSettled: () => void invalidateTouched(client, resource),
+  });
 }

@@ -3,11 +3,12 @@ import { AppState, Text, View } from "react-native";
 import { useFonts } from "expo-font";
 import { PrivyProvider } from "./lib/privy";
 import { PrivyElements } from "./lib/privy";
-import {
-  focusManager,
-  QueryClient,
-  QueryClientProvider,
-} from "@tanstack/react-query";
+import { focusManager, QueryClient } from "@tanstack/react-query";
+import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
+import { createAsyncStoragePersister } from "@tanstack/query-async-storage-persister";
+import { queryStorage } from "./lib/query-storage";
+import { policyFor } from "./lib/queries";
+import Constants from "expo-constants";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { preloadSounds } from "./lib/sound";
 import { config, isConfigured } from "./config";
@@ -61,6 +62,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
     OmenUI_600SemiBold: require("../assets/fonts/OmenUI-SemiBold.ttf"),
     ...webFonts,
   });
+  // What was loaded stays for an hour in memory and, for the resources
+  // `queries.ts` marks, on the device: the next launch opens with the last
+  // session's figures on screen and refreshes them behind.
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -68,6 +72,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
           queries: { staleTime: 15000, gcTime: 60 * 60_000, retry: 1, refetchOnWindowFocus: true },
         },
       }),
+  );
+  const [persister] = useState(() =>
+    createAsyncStoragePersister({ storage: queryStorage, key: "omen.queries", throttleTime: 2000 }),
   );
   // Loads the effects and lets the first touch unlock playback.
   useEffect(preloadSounds, []);
@@ -82,7 +89,21 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <SafeAreaProvider>
       <ErrorBoundary>
-        <QueryClientProvider client={queryClient}>
+        <PersistQueryClientProvider
+          client={queryClient}
+          persistOptions={{
+            persister,
+            maxAge: 24 * 60 * 60_000,
+            // A new app version starts clean, in case a shape changed.
+            buster: String(Constants.expoConfig?.version ?? "0"),
+            dehydrateOptions: {
+              shouldDehydrateQuery: (q) =>
+                q.state.status === "success" &&
+                q.queryKey[0] === "mobile" &&
+                Boolean(policyFor(String(q.queryKey[2])).persist),
+            },
+          }}
+        >
           {isConfigured ? (
             <PrivyProvider
               appId={config.appId}
@@ -95,7 +116,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
           ) : (
             children
           )}
-        </QueryClientProvider>
+        </PersistQueryClientProvider>
       </ErrorBoundary>
     </SafeAreaProvider>
   );

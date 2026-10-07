@@ -105,8 +105,11 @@ import {
 import {
   useMobile,
   useMobileAction,
+  useMobilePages,
+  useMobileMutation,
   mobileFetch,
   usePrefetchMobile,
+  usePrefetchMobilePages,
 } from "../lib/mobile-api";
 import { useStableOrder } from "../lib/stable-order";
 import { Animated, Easing, type TextInput, type TextStyle } from "react-native";
@@ -118,6 +121,7 @@ import { playSound, preloadSounds } from "../lib/sound";
 import { LinearGradient } from "expo-linear-gradient";
 import { BUTTON_RADIUS, Gloss, raised, raisedQuiet } from "../components/gloss";
 import { motion } from "../lib/motion";
+import { keys } from "../lib/queries";
 import { InviteSheet } from "../components/invite-sheet";
 // The saved chart timeframe and style are ready before any token page opens.
 void loadChartPrefs();
@@ -517,20 +521,22 @@ export function MarketShell(props: MarketShellProps) {
       return null;
     }
   };
+  const starMutation = useMobileMutation<{ mint: string; had: boolean }>("watchlist", {
+    method: ({ had }) => (had ? "DELETE" : "POST"),
+    optimistic: (client, uid, { mint, had }) => {
+      const key = keys.query(uid, "watchlist", {});
+      const previous = client.getQueryData(key);
+      client.setQueryData(key, (old: any) =>
+        old?.data ? { ...old, data: had ? old.data.filter((x: string) => x !== mint) : [...old.data, mint] } : old,
+      );
+      return [{ key, previous }];
+    },
+    onError: (e) => showErrorToast(e instanceof Error ? e.message : "Please try again."),
+  });
   const star = async (mint: string) => {
-    queryClient.setQueryData(["mobile", user?.id, "watchlist", {}], (old: any) =>
-      old?.data
-        ? { ...old, data: old.data.includes(mint) ? old.data.filter((x: string) => x !== mint) : [...old.data, mint] }
-        : old,
-    );
-    const had = watches.data?.data.includes(mint);
-    const saved = await action(
-      "watchlist",
-      { mint },
-      had ? "DELETE" : "POST",
-    );
-    // A save that failed puts the list back as the server has it.
-    if (!saved) void watches.refetch();
+    if (guest) return askSignIn();
+    const had = Boolean(watches.data?.data.includes(mint));
+    await starMutation.mutateAsync({ mint, had }).catch(() => undefined);
   };
   if (gate === "wait") return <LaunchScreen />;
   return (
@@ -1052,7 +1058,6 @@ function SearchScreen({ active }: { active: boolean }) {
   const [sort, setSort] = useState<QuickSort>("cap");
   const [direction, setDirection] = useState<SortDirection>("desc");
   const [sheet, setSheet] = useState(false);
-  const [cursor, setCursor] = useState("0");
   const key = "omen.search." + a.address;
   // A tap before the saved state loads must win over the stale load.
   const touched = useRef(false);
@@ -1091,9 +1096,7 @@ function SearchScreen({ active }: { active: boolean }) {
     const timer = setTimeout(() => {
       const typed = q.trim();
       const next = typed.length >= 2 ? typed : "";
-      if (next !== search) setRows([]);
       setSearch(next);
-      setCursor("0");
     }, 300);
     return () => clearTimeout(timer);
   }, [q]);
@@ -1111,8 +1114,6 @@ function SearchScreen({ active }: { active: boolean }) {
   const chooseType = (next: SearchType) => {
     if (next === type) return;
     setType(next);
-    setRows([]);
-    setCursor("0");
   };
   // APR is a Stonk figure: the other lists rank by volume in its place.
   const listSort = type !== "tokens" && sort === "apr" ? "volume" : sort;
@@ -1120,7 +1121,7 @@ function SearchScreen({ active }: { active: boolean }) {
   // couple of seconds the first time; that part is asked for separately
   // (chain=only) so the index's matches show at once (chain=skip) and the
   // chain's finds join them on top when they arrive.
-  const chainSearch = type === "tokens" && cursor === "0" && search.length >= 2 && !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(search);
+  const chainSearch = type === "tokens" && search.length >= 2 && !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(search);
   const listParams = {
     scope: "stonk",
     type,
@@ -1128,35 +1129,21 @@ function SearchScreen({ active }: { active: boolean }) {
     sort: listSort,
     direction,
     filters: JSON.stringify(filters),
-    cursor,
     ...(chainSearch ? { chain: "skip" } : {}),
   };
-  const assets = useMobile<Asset[]>("assets", listParams, active && restored, 10000);
+  const assets = useMobilePages<Asset>("assets", listParams, active && restored, { id: (x) => x.mint, first: "0" });
   const chainFinds = useMobile<Asset[]>("assets", { ...listParams, chain: "only" }, active && restored && chainSearch, 0);
   // The tab is mounted from launch: its first page is fetched in the
   // background then, so opening Search shows the list at once.
-  const prefetch = usePrefetchMobile();
+  const prefetchPages = usePrefetchMobilePages();
   const warmed = useRef(false);
   useEffect(() => {
     if (!restored || active || warmed.current) return;
     warmed.current = true;
-    prefetch("assets", listParams, 60000);
+    prefetchPages("assets", listParams, "0", 60000);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [restored, active]);
-  // Pages accumulate as the user scrolls; a new query starts over at "0".
-  const [rows, setRows] = useState<Asset[]>([]);
-  useEffect(() => {
-    const page = assets.data?.data;
-    if (!page) return;
-    setRows((prev) => {
-      if (cursor === "0") return page;
-      const seen = new Set(prev.map((x) => x.mint));
-      return [...prev, ...page.filter((x) => !seen.has(x.mint))];
-    });
-  }, [assets.data, cursor]);
-  // The first page renders straight from the query so a fresh result never
-  // passes through an empty frame before the accumulated rows catch up.
-  const listed = rows.length ? rows : (assets.data?.data ?? []);
+  const listed = assets.rows;
   const finds = chainSearch ? (chainFinds.data?.data ?? []) : [];
   const visible = finds.length
     ? [...finds, ...listed.filter((asset) => !finds.some((f) => f.mint === asset.mint))]
@@ -1171,10 +1158,7 @@ function SearchScreen({ active }: { active: boolean }) {
     const task = InteractionManager.runAfterInteractions(() => setDrawn(Number.MAX_SAFE_INTEGER));
     return () => task.cancel();
   }, [firstMint, type, search, sort, direction]);
-  const loadMore = () => {
-    const next = assets.data?.nextCursor;
-    if (next && next !== cursor && !assets.isFetching) setCursor(next);
-  };
+  const loadMore = () => assets.fetchNext();
   const save = (
     nextFilters: Filters,
     nextSort = sort,
@@ -1184,7 +1168,6 @@ function SearchScreen({ active }: { active: boolean }) {
     setFilters(nextFilters);
     setSort(nextSort);
     setDirection(nextDirection);
-    setCursor("0");
     void SecureStore.setItemAsync(
       key,
       JSON.stringify({
@@ -1419,7 +1402,7 @@ function SearchScreen({ active }: { active: boolean }) {
             }}
           />
         )}
-        {visible.length && assets.isFetching && cursor !== "0" ? (
+        {visible.length && assets.isFetchingNext ? (
           <Text style={[m.muted, { textAlign: "center" }]}>Loading more…</Text>
         ) : null}
       </Page>
@@ -4457,9 +4440,7 @@ function ActivityContent({
 }) {
   const a = useApp();
   const p: Portfolio | undefined = a.positions.data?.data;
-  const [cursor, setCursor] = useState(""),
-    [mint, setMint] = useState(onlyMint || ""),
-    [pages, setPages] = useState<Activity[]>([]);
+  const [mint, setMint] = useState(onlyMint || "");
   // Dividends show five at a time; "View more" adds five, fetching the next
   // page from the server when the loaded ones run out.
   const [shown, setShown] = useState(5);
@@ -4473,27 +4454,9 @@ function ActivityContent({
     ["buyback", "Compounds"],
     ["swap", "Swaps"],
   ];
-  const q = useMobile<Activity[]>(
-    "activity",
-    // The dividends list pages over dividends alone, so "load more" only
-    // appears when there are more of them.
-    {
-      address,
-      ...(dividends ? { kind: "dividend" } : {}),
-      ...(cursor ? { cursor } : {}),
-    },
-    active,
-  );
-  // Pages accumulate behind a "Load more" link; the first page replaces.
-  useEffect(() => {
-    const page = q.data?.data;
-    if (!page) return;
-    setPages((prev) => {
-      if (!cursor) return page;
-      const seen = new Set(prev.map((x) => x.id));
-      return [...prev, ...page.filter((x) => !seen.has(x.id))];
-    });
-  }, [q.data, cursor]);
+  // The dividends list pages over dividends alone, so "load more" only
+  // appears when there are more of them.
+  const q = useMobilePages<Activity>("activity", { address, ...(dividends ? { kind: "dividend" } : {}) }, active, { id: (r) => r.id });
   const since =
     period === "24h"
       ? Date.now() - 86400000
@@ -4502,7 +4465,7 @@ function ActivityContent({
         : period === "30d"
           ? Date.now() - 30 * 86400000
           : 0;
-  const loaded = pages.length ? pages : (q.data?.data ?? []);
+  const loaded = q.rows;
   const rows = loaded.filter(
     (r) =>
       (!dividends || r.kind === "dividend" || r.kind === "drip") &&
@@ -4527,7 +4490,7 @@ function ActivityContent({
       name: r.symbol,
       image: r.image ?? null,
     };
-  const next = q.data?.nextCursor;
+  const next = q.hasNext;
   return (
     <>
       {/* What the list shows: every payout, or what DRIP did with them. */}
@@ -4650,13 +4613,12 @@ function ActivityContent({
         )
       )}
       {dividends ? (
-        rows.length > shown || (next && next !== cursor && (rows.length > 0 || !onlyMint)) ? (
+        rows.length > shown || (next && (rows.length > 0 || !onlyMint)) ? (
           <Pressable
             accessibilityRole="button"
             onPress={() => {
               setShown((n) => n + 5);
-              if (rows.length <= shown + 5 && next && next !== cursor)
-                setCursor(next);
+              if (rows.length <= shown + 5 && next) q.fetchNext();
             }}
             style={{
               minHeight: 40,
@@ -4665,21 +4627,21 @@ function ActivityContent({
             }}
           >
             <Text style={m.link}>
-              {q.isFetching ? "Loading…" : "View more"}
+              {q.isFetchingNext ? "Loading…" : "View more"}
             </Text>
           </Pressable>
         ) : null
-      ) : rows.length > 0 && next && next !== cursor ? (
+      ) : rows.length > 0 && next ? (
         <Pressable
           accessibilityRole="button"
-          onPress={() => setCursor(next)}
+          onPress={() => q.fetchNext()}
           style={{
             minHeight: 40,
             alignItems: "center",
             justifyContent: "center",
           }}
         >
-          <Text style={m.link}>{q.isFetching ? "Loading…" : "Load more"}</Text>
+          <Text style={m.link}>{q.isFetchingNext ? "Loading…" : "Load more"}</Text>
         </Pressable>
       ) : null}
     </>
