@@ -1116,7 +1116,7 @@ function SearchScreen({ active }: { active: boolean }) {
     setType(next);
   };
   // APR is a Stonk figure: the other lists rank by volume in its place.
-  const listSort = type !== "tokens" && sort === "apr" ? "volume" : sort;
+  const listSort = type !== "tokens" && (sort === "apr" || sort === "cap") ? "volume" : sort;
   // Words typed into Tokens also search the whole chain, which takes a
   // couple of seconds the first time; that part is asked for separately
   // (chain=only) so the index's matches show at once (chain=skip) and the
