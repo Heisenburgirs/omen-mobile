@@ -13,6 +13,7 @@ import { statusLine, toolStatus, writingStatus } from "./status";
 import { mergeRefs, type MessageRefs } from "./refs";
 import { isAgentBalance } from "./intent";
 import { isResearch, mentionedSymbols } from "./tools";
+import { FOLLOW_UP_CAP_MICRO, FOLLOW_UP_ROUNDS, followUpPrompt, parseFollowUp, type FollowUpCall } from "./followup";
 export { guessIntent, type Intent } from "./intent";
 
 // One turn of the agent. Jev decides, code does, a model writes:
@@ -55,6 +56,8 @@ export type TurnInput = {
   attachments?: PendingAttachment[];
   /** The agent's own balance, for questions about it. */
   agent?: () => AgentAccount | null;
+  /** False turns off the follow-up rounds a judgement takes after its first lookups. */
+  followUp?: boolean;
   /** Ryvo tool calls paid from the agent's channel; absent when it is not funded. */
   paid?: ToolContext["paid"];
   /** A write to the app's API; absent when signed out. */
@@ -206,41 +209,67 @@ export async function runTurn(input: TurnInput): Promise<TurnResult> {
     const line = statusLine([...running.values()]);
     if (line) status(line);
   };
-  const results = await Promise.all(
-    plan.tools.map(async (id) => {
-      const tool = toolById(id);
-      if (!tool) return "";
-      const started = Date.now();
-      running.set(id, toolStatus(id, input.text));
-      showRunning();
-      const toolCtx: ToolContext = {
-        ...ctx,
-        planned: plan.tools,
-        status: (line) => {
-          running.set(id, line);
-          showRunning();
-        },
-      };
-      try {
-        // A paid lookup that has not answered in 30 s is left out of the reply.
-        const result = await Promise.race([
-          tool.run(toolCtx),
-          new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timed out")), tool.timeoutMs ?? 30_000)),
-        ]);
-        Object.assign(args, result.args ?? {});
-        toolCostMicro += result.costMicro ?? 0;
-        if (result.refs) refParts.push(result.refs);
-        return `${id}: ${result.data}`;
-      } catch (e) {
-        return `${id}: unavailable (${e instanceof Error ? e.message : "error"})`;
-      } finally {
-        timings.push({ label: id, ms: Date.now() - started });
-        running.delete(id);
+  // Runs one tool for one request line (the message, or a follow-up naming
+  // what to look at); its data goes into the reply, its failure is noted.
+  const runTool = async (id: string, text: string): Promise<string> => {
+    const tool = toolById(id);
+    if (!tool) return "";
+    const started = Date.now();
+    const key = id + ":" + started;
+    running.set(key, toolStatus(id, text));
+    showRunning();
+    const toolCtx: ToolContext = {
+      ...ctx,
+      text,
+      planned: plan.tools,
+      status: (line) => {
+        running.set(key, line);
         showRunning();
-      }
-    }),
-  );
-  const data = [...results.filter(Boolean), ...attachmentContext(input.attachments ?? [])];
+      },
+    };
+    try {
+      // A paid lookup that has not answered in 30 s is left out of the reply.
+      const result = await Promise.race([
+        tool.run(toolCtx),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timed out")), tool.timeoutMs ?? 30_000)),
+      ]);
+      Object.assign(args, result.args ?? {});
+      toolCostMicro += result.costMicro ?? 0;
+      if (result.refs) refParts.push(result.refs);
+      return `${id}: ${result.data}`;
+    } catch (e) {
+      return `${id}: unavailable (${e instanceof Error ? e.message : "error"})`;
+    } finally {
+      timings.push({ label: id, ms: Date.now() - started });
+      running.delete(key);
+      showRunning();
+    }
+  };
+  const results = await Promise.all(plan.tools.map((id) => runTool(id, input.text)));
+  const data = [...results.filter(Boolean)];
+
+  // 2b. A second look. For a judgement, a cheap model reads what came back
+  // next to the question and names what is still missing; those lookups run
+  // and it looks again, up to a few rounds and a spend cap. A tool that
+  // failed outright is not asked for twice.
+  if (plan.tier === "judge" && data.length && input.followUp !== false) {
+    const asked: FollowUpCall[] = plan.tools.map((tool) => ({ tool, text: input.text }));
+    const turnStart = timings.reduce((s, x) => s + x.ms, 0);
+    for (let round = 1; round <= FOLLOW_UP_ROUNDS; round++) {
+      if (toolCostMicro > FOLLOW_UP_CAP_MICRO || timings.reduce((s, x) => s + x.ms, 0) - turnStart > 60_000) break;
+      status("Checking what else to look at");
+      const asked_ = await time("followup" + round, () =>
+        input.write([{ role: "user", content: followUpPrompt(input.text, data, TOOLS, asked) }], { model: MODELS.lookup.model, maxTokens: 300 }),
+      ).catch(() => null);
+      if (asked_?.costMicro) toolCostMicro += asked_.costMicro;
+      const calls = asked_ ? parseFollowUp(asked_.content, TOOLS, asked) : [];
+      if (!calls.length) break;
+      asked.push(...calls);
+      const more = await Promise.all(calls.map((c) => runTool(c.tool, c.text)));
+      data.push(...more.filter(Boolean));
+    }
+  }
+  data.push(...attachmentContext(input.attachments ?? []));
 
   // 3. Write, with the model the kind of answer calls for.
   const choice = MODELS[plan.tier];
