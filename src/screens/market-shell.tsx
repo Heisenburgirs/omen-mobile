@@ -121,7 +121,6 @@ import { playSound, preloadSounds } from "../lib/sound";
 import { LinearGradient } from "expo-linear-gradient";
 import { BUTTON_RADIUS, Gloss, raised, raisedQuiet } from "../components/gloss";
 import { motion } from "../lib/motion";
-import { blueCard } from "../theme";
 import { keys } from "../lib/queries";
 import { InviteSheet } from "../components/invite-sheet";
 // The saved chart timeframe and style are ready before any token page opens.
@@ -829,7 +828,6 @@ function Home({ active }: { active: boolean }) {
             },
           ]}
         >
-          <LinearGradient pointerEvents="none" colors={blueCard.colors} start={blueCard.start} end={blueCard.end} style={StyleSheet.absoluteFill} />
           <View style={[m.row, { gap: 6, height: 20 }]}>
             <AssetIcon asset={asset} size={20} />
             <Text
@@ -887,7 +885,7 @@ function Home({ active }: { active: boolean }) {
   );
   return (
     <Page refresh={refresh}>
-      <LinearGradient colors={blueCard.colors} start={blueCard.start} end={blueCard.end} style={s.balanceCard}>
+      <View style={s.balanceCard}>
         {/* Who this is: the picture and name over the balance, and the
             address copied from the button beside them. 32 px, loaded or not. */}
         <View style={[m.row, { gap: 10, height: 32, marginBottom: 6 }]}>
@@ -2819,14 +2817,10 @@ function AssetScreen({ mint, active }: { mint: string; active: boolean }) {
                 </View>
               </View>
               {/* A visitor holds nothing yet: the card would only ever say $0. */}
-              <LinearGradient
-                colors={blueCard.colors}
-                start={blueCard.start}
-                end={blueCard.end}
+              <View
                 style={[
                   m.panel,
                   m.between,
-                  s.blueCard,
                   {
                     alignItems: "flex-end",
                     display: a.guest ? "none" : "flex",
@@ -2882,7 +2876,7 @@ function AssetScreen({ mint, active }: { mint: string; active: boolean }) {
                             usd(Math.abs(unrealized)))}
                   </Text>
                 </View>
-              </LinearGradient>
+              </View>
               {mint === SKR_MINT ? (
                 <SkrStakeCard
                   active={active}
@@ -7963,12 +7957,10 @@ function PeopleList({
   );
 }
 const s = StyleSheet.create({
-  blueCard: { padding: 18, borderRadius: 22, overflow: "hidden" },
   balanceCard: {
     gap: 6,
-    padding: 18,
-    borderRadius: 22,
-    overflow: "hidden",
+    paddingTop: 4,
+    marginBottom: -4,
   },
   currency: {
     backgroundColor: colors.surface,
@@ -7979,7 +7971,7 @@ const s = StyleSheet.create({
     justifyContent: "center",
   },
   assetTile: {
-    backgroundColor: "#0F1423",
+    backgroundColor: "#141E3D",
     borderRadius: 14,
     overflow: "hidden",
     padding: 12,
@@ -8070,7 +8062,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 22,
-    backgroundColor: "#111627",
+    backgroundColor: "#121B38",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.06)",
     elevation: 10,
