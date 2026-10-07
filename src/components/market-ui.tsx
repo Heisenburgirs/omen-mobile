@@ -567,7 +567,7 @@ export function SkeletonTiles({
             width,
             height: 76,
             padding: 12,
-            backgroundColor: "#0B1122",
+            backgroundColor: "#12151E",
             gap: 6,
             borderRadius: 12,
           }}
