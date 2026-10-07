@@ -5,6 +5,8 @@ import { useEmbeddedSolanaWallet, useLoginWithOAuth, useLoginWithSiws, usePrivy,
 import { useQueryClient } from "@tanstack/react-query";
 import { WelcomeScreen } from "./welcome";
 import { LaunchScreen } from "../components/launch-screen";
+import { usePrefetchMobilePages } from "../lib/mobile-api";
+import { DEFAULT_SEARCH_PARAMS } from "../lib/queries";
 import { MarketShell } from "./market-shell";
 import { Mark, Notice, ui } from "../components/ui";
 import { AccountSetupScreen, AccountSetupTransition } from "../components/account-setup";
@@ -24,6 +26,11 @@ export function SessionScreen() {
   const { loginWith: loginWithBrowserWallet } = useWalletLogin();
   const wallet = useEmbeddedSolanaWallet();
   const queryClient = useQueryClient();
+  const prefetchPages = usePrefetchMobilePages();
+  useEffect(() => {
+    prefetchPages("assets", DEFAULT_SEARCH_PARAMS, "0", 10000);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [busy, setBusy] = useState(false);
   const [pendingProvider, setPendingProvider] = useState<LoginProvider | null>(null);
   const [committingLogin, setCommittingLogin] = useState(false);

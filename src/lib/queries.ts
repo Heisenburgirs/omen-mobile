@@ -44,6 +44,9 @@ const POLICIES: Record<string, Policy> = {
 const DEFAULT: Policy = { stale: 15_000 };
 export const policyFor = (resource: string): Policy => POLICIES[resource] ?? DEFAULT;
 
+/** What Search shows first (every token by market cap): the splash fetches this before anything else. */
+export const DEFAULT_SEARCH_PARAMS = { scope: "stonk", type: "tokens", q: "", sort: "cap", direction: "desc", filters: "{}" };
+
 /** Query keys, built one way everywhere: ["mobile", user, resource, params]. */
 export const keys = {
   all: ["mobile"] as const,

@@ -56,6 +56,12 @@ export async function mobileFetch<T>(
  */
 export const PUBLIC_RESOURCES = ["assets", "asset", "stats", "candles"];
 const ready = (user: unknown, resource: string) => Boolean(user) || PUBLIC_RESOURCES.includes(resource);
+const isPublic = (resource: string) => PUBLIC_RESOURCES.includes(resource);
+/** The key's user: none for public market data, which is the same for everyone and shared across sign-in states. */
+const owner = (user: { id?: string } | null | undefined, resource: string) => (isPublic(resource) ? undefined : user?.id);
+/** The request's token: none for public market data, so the edge cache can serve it. */
+const bearer = async (user: unknown, resource: string, getAccessToken: () => Promise<string | null>) =>
+  user && !isPublic(resource) ? getAccessToken() : null;
 /**
  * One request's answer, kept as `queries.ts` says for its resource: how
  * often it refreshes on screen, how long it is fresh, whether the previous
@@ -77,9 +83,9 @@ export function useMobile<T>(
   const { user, getAccessToken } = usePrivy();
   const policy = policyFor(resource);
   return useQuery({
-    queryKey: keys.query(user?.id, resource, params),
+    queryKey: keys.query(owner(user, resource), resource, params),
     queryFn: async ({ signal }) =>
-      mobileFetch<T>(resource, params, user ? await getAccessToken() : null, signal),
+      mobileFetch<T>(resource, params, await bearer(user, resource, getAccessToken), signal),
     enabled: enabled && ready(user, resource),
     staleTime: policy.stale,
     refetchInterval: (interval ?? policy.interval) || false,
@@ -117,12 +123,12 @@ export function useMobilePages<T>(
   const policy = policyFor(resource);
   const first = options.first ?? "";
   const q = useInfiniteQuery({
-    queryKey: keys.query(user?.id, resource, params),
+    queryKey: keys.query(owner(user, resource), resource, params),
     queryFn: async ({ signal, pageParam }) =>
       mobileFetch<T[]>(
         resource,
         { ...params, ...(pageParam && pageParam !== first ? { cursor: pageParam } : {}) },
-        user ? await getAccessToken() : null,
+        await bearer(user, resource, getAccessToken),
         signal,
       ),
     initialPageParam: first,
@@ -180,9 +186,8 @@ export function usePrefetchMobile() {
   return (resource: string, params: Record<string, string> = {}, staleMs = 10000) => {
     if (!ready(user, resource)) return;
     void client.prefetchQuery({
-      queryKey: keys.query(user?.id, resource, params),
-      queryFn: async ({ signal }) =>
-        mobileFetch(resource, params, user ? await getAccessToken() : null, signal),
+      queryKey: keys.query(owner(user, resource), resource, params),
+      queryFn: async ({ signal }) => mobileFetch(resource, params, await bearer(user, resource, getAccessToken), signal),
       staleTime: staleMs,
     });
   };
@@ -194,8 +199,8 @@ export function usePrefetchMobilePages() {
   return (resource: string, params: Record<string, string>, first = "", staleMs = 10000) => {
     if (!ready(user, resource)) return;
     void client.prefetchInfiniteQuery({
-      queryKey: keys.query(user?.id, resource, params),
-      queryFn: async ({ signal }) => mobileFetch(resource, params, user ? await getAccessToken() : null, signal),
+      queryKey: keys.query(owner(user, resource), resource, params),
+      queryFn: async ({ signal }) => mobileFetch(resource, params, await bearer(user, resource, getAccessToken), signal),
       initialPageParam: first,
       staleTime: staleMs,
     });
