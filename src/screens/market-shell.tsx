@@ -36,7 +36,8 @@ import {
 } from "../components/omen-sheet";
 import { WebView } from "../components/web-view";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { usePrivy, useFundSolanaWallet } from "../lib/privy";
+import { usePrivy } from "../lib/privy";
+import * as WebBrowser from "expo-web-browser";
 import { AgentScreen } from "./agent";
 import { isAddress } from "@solana/kit";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -6982,30 +6983,36 @@ function ActivityScreen({
   );
 }
 
-/** The card amounts offered first; MoonPay's own minimum is about twenty dollars. */
+/** The card amounts offered first; Mercuryo's minimum is about twenty dollars. */
 const CARD_AMOUNTS = [20, 50, 100, 250];
 function Receive() {
   const a = useApp(),
     [copied, setCopied] = useState(false);
   // Two ways in: a card (Google Pay, Apple Pay or a card number, through
-  // MoonPay inside Privy's sheet) or crypto sent to the address.
+  // Mercuryo in a browser tab: wallet pays do not work inside a WebView)
+  // or crypto sent to the address.
   const [way, setWay] = useState<"card" | "crypto">("card");
   const [cardUsd, setCardUsd] = useState(50);
   const [funding, setFunding] = useState(false);
-  const { fundWallet } = useFundSolanaWallet();
+  const onramp = useMobile<{ available: boolean; purchases: { id: string; usd: number; status: string; created_at: string }[] }>("onramp", {}, !a.guest);
   const buyWithCard = async () => {
     if (funding) return;
     setFunding(true);
     try {
-      await fundWallet({ address, asset: "USDC", amount: String(cardUsd) });
-      // The sheet closes when the purchase is placed or abandoned; funds
-      // take a few minutes to land, and the balance polls on its own.
+      const r = (await a.action("onramp", { usd: cardUsd, wallet: address })) as { data: { url: string } } | null;
+      if (!r) return;
+      await WebBrowser.openBrowserAsync(r.data.url, { presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN });
+      // Back in the app: the purchase lands in a few minutes; the balance
+      // polls on its own and the purchase list refreshes now.
+      void onramp.refetch();
+      void a.positions.refetch();
     } catch (e) {
       showErrorToast(errorMessage(e));
     } finally {
       setFunding(false);
     }
   };
+  const pending = (onramp.data?.data.purchases ?? []).filter((x) => !["paid", "succeeded", "failed", "cancelled", "canceled", "expired"].includes(x.status));
   // The card is as wide as the page, so the QR's size is known before the
   // first frame; nothing appears a beat late and shifts the content.
   const qrWidth = useWindowDimensions().width - 2 * space.edge;
@@ -7049,14 +7056,24 @@ function Receive() {
       {way === "card" ? (
         <View style={{ gap: 16 }}>
           <Text style={m.muted}>Google Pay, Apple Pay or a card. Arrives as cash in a few minutes.</Text>
+          {pending.length ? (
+            <Text style={[m.muted, { color: colors.ice }]}>
+              {"A $" + pending[0]!.usd + " purchase is on its way."}
+            </Text>
+          ) : null}
           <View style={[m.row, { gap: 8 }]}>
             {CARD_AMOUNTS.map((usd) => (
               <Chip key={usd} label={"$" + usd} selected={cardUsd === usd} onPress={() => setCardUsd(usd)} />
             ))}
           </View>
-          <Button title={funding ? "Opening…" : "Continue with card"} busy={funding} disabled={funding} onPress={() => void buyWithCard()} />
+          <Button
+            title={funding ? "Opening…" : onramp.data && !onramp.data.data.available ? "Card purchases coming soon" : "Continue with card"}
+            busy={funding}
+            disabled={funding || Boolean(onramp.data && !onramp.data.data.available)}
+            onPress={() => void buyWithCard()}
+          />
           <Text style={[m.muted, { fontSize: 12, lineHeight: 16 }]}>
-            Payments are handled by MoonPay. The first purchase asks for identity verification; card fees are MoonPay's.
+            Payments are handled by Mercuryo in your browser. The first purchase asks for identity verification; card fees are Mercuryo's.
           </Text>
         </View>
       ) : (

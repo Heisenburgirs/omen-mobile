@@ -36,6 +36,7 @@ const POLICIES: Record<string, Policy> = {
   "skr-stake": { interval: 30_000, stale: 15_000, keep: true },
   me: { stale: MINUTE, persist: true },
   "agent-credits": { stale: MINUTE, persist: true },
+  onramp: { stale: 30_000 },
   people: { stale: MINUTE, keep: true },
   profile: { stale: MINUTE, keep: true, persist: true },
   relations: { stale: MINUTE, keep: true },
@@ -71,5 +72,6 @@ export const TOUCHES: Record<string, string[]> = {
   follow: ["me", "profile", "people", "relations"],
   block: ["me", "profile", "people", "blocked"],
   onboarding: ["me"],
+  onramp: ["onramp"],
   report: [],
 };
