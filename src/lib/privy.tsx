@@ -16,4 +16,4 @@ export {
 } from "@privy-io/expo";
 export { useImportWallet } from "./privy-import";
 export { useWalletLogin } from "./wallet-login-native";
-export { PrivyElements } from "@privy-io/expo/ui";
+export { PrivyElements, useFundSolanaWallet } from "@privy-io/expo/ui";

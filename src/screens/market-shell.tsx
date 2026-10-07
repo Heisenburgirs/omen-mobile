@@ -36,7 +36,7 @@ import {
 } from "../components/omen-sheet";
 import { WebView } from "../components/web-view";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { usePrivy } from "../lib/privy";
+import { usePrivy, useFundSolanaWallet } from "../lib/privy";
 import { AgentScreen } from "./agent";
 import { isAddress } from "@solana/kit";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -70,6 +70,7 @@ import {
   type IconName,
   IconButton,
   Chip,
+  TextTabs,
   Field,
   avatarColor,
   Section,
@@ -6981,9 +6982,30 @@ function ActivityScreen({
   );
 }
 
+/** The card amounts offered first; MoonPay's own minimum is about twenty dollars. */
+const CARD_AMOUNTS = [20, 50, 100, 250];
 function Receive() {
   const a = useApp(),
     [copied, setCopied] = useState(false);
+  // Two ways in: a card (Google Pay, Apple Pay or a card number, through
+  // MoonPay inside Privy's sheet) or crypto sent to the address.
+  const [way, setWay] = useState<"card" | "crypto">("card");
+  const [cardUsd, setCardUsd] = useState(50);
+  const [funding, setFunding] = useState(false);
+  const { fundWallet } = useFundSolanaWallet();
+  const buyWithCard = async () => {
+    if (funding) return;
+    setFunding(true);
+    try {
+      await fundWallet({ address, asset: "USDC", amount: String(cardUsd) });
+      // The sheet closes when the purchase is placed or abandoned; funds
+      // take a few minutes to land, and the balance polls on its own.
+    } catch (e) {
+      showErrorToast(errorMessage(e));
+    } finally {
+      setFunding(false);
+    }
+  };
   // The card is as wide as the page, so the QR's size is known before the
   // first frame; nothing appears a beat late and shifts the content.
   const qrWidth = useWindowDimensions().width - 2 * space.edge;
@@ -6995,27 +7017,10 @@ function Receive() {
     a.scope !== "all" && wallets.some((w: WalletEntry) => w.address === a.scope) ? a.scope : a.address;
   // Deposits alone, a page at a time; the next page loads as the list
   // nears its end.
-  const [cursor, setCursor] = useState("");
-  const [pages, setPages] = useState<Activity[]>([]);
-  const activity = useMobile<Activity[]>("activity", {
-    address,
-    kind: "deposit",
-    ...(cursor ? { cursor } : {}),
-  });
-  useEffect(() => {
-    const page = activity.data?.data;
-    if (!page) return;
-    setPages((prev) => {
-      if (!cursor) return page;
-      const seen = new Set(prev.map((x) => x.id));
-      return [...prev, ...page.filter((x) => !seen.has(x.id))];
-    });
-  }, [activity.data, cursor]);
-  const received = pages;
-  const next = activity.data?.nextCursor;
-  const loadMore = () => {
-    if (next && next !== cursor && !activity.isFetching) setCursor(next);
-  };
+  const activity = useMobilePages<Activity>("activity", { address, kind: "deposit" }, true, { id: (r) => r.id });
+  const received = activity.rows;
+  const pages = received;
+  const loadMore = () => activity.fetchNext();
   const copy = () =>
     void Clipboard.setStringAsync(address)
       .then(() => setCopied(true))
@@ -7040,6 +7045,22 @@ function Receive() {
     };
   return (
     <Page compact onEndReached={loadMore}>
+      <TextTabs items={["Card", "Crypto"]} value={way === "card" ? "Card" : "Crypto"} onChange={(v) => setWay(v === "Card" ? "card" : "crypto")} />
+      {way === "card" ? (
+        <View style={{ gap: 16 }}>
+          <Text style={m.muted}>Google Pay, Apple Pay or a card. Arrives as cash in a few minutes.</Text>
+          <View style={[m.row, { gap: 8 }]}>
+            {CARD_AMOUNTS.map((usd) => (
+              <Chip key={usd} label={"$" + usd} selected={cardUsd === usd} onPress={() => setCardUsd(usd)} />
+            ))}
+          </View>
+          <Button title={funding ? "Opening…" : "Continue with card"} busy={funding} disabled={funding} onPress={() => void buyWithCard()} />
+          <Text style={[m.muted, { fontSize: 12, lineHeight: 16 }]}>
+            Payments are handled by MoonPay. The first purchase asks for identity verification; card fees are MoonPay's.
+          </Text>
+        </View>
+      ) : (
+        <>
       <Text style={m.muted}>Send any Solana asset to this address.</Text>
       <View
         style={{
@@ -7081,6 +7102,8 @@ function Receive() {
           </Text>
         </Pressable>
       </View>
+        </>
+      )}
       <View style={{ gap: 4 }}>
         <Text style={m.heading}>Previous deposits</Text>
         {activity.isPending && !pages.length ? (
@@ -7151,7 +7174,7 @@ function Receive() {
         ) : (
           <Empty title="No deposits yet" plain />
         )}
-        {activity.isFetching && pages.length ? (
+        {activity.isFetchingNext && pages.length ? (
           <SkeletonRows count={1} plain />
         ) : null}
       </View>

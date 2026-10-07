@@ -30,6 +30,7 @@ import {
   toSolanaWalletConnectors,
 } from "@privy-io/react-auth/solana";
 import { VersionedTransaction } from "@solana/web3.js";
+import { useFundWallet as useWebFundWallet } from "@privy-io/react-auth/solana";
 import { Buffer } from "buffer";
 import { privyWallets, type LinkedAccount } from "./authority";
 
@@ -87,6 +88,14 @@ export function PrivyProvider({
 }
 /** The Expo SDK mounts its sheets here; the web SDK mounts its own. */
 export const PrivyElements = () => null;
+/** Privy's funding flow for a Solana wallet (card via MoonPay, exchange), as the Expo SDK names it. */
+export function useFundSolanaWallet() {
+  const { fundWallet } = useWebFundWallet();
+  return {
+    fundWallet: (config: { address: string; amount?: string; asset?: "USDC" | "native-currency" }) =>
+      fundWallet({ address: config.address, options: { amount: config.amount, asset: config.asset } as never }),
+  };
+}
 
 export function usePrivy() {
   const privy = useWebPrivy();
