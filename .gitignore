@@ -22,5 +22,3 @@ ios/
 modules/*/android/build/
 modules/*/android/.gradle/
 
-# Codex recovery manifest from the D: drive copy; not source.
-recovery-copy.json

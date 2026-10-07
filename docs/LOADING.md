@@ -1,6 +1,6 @@
 # Loading states
 
-While a screen's first load is pending it shows a placeholder that has the same geometry as the content it stands in for, so nothing shifts when data arrives. Placeholders are grey blocks and circles that pulse together (one shared opacity animation between 45% and 95%).
+While a screen's first load is pending it shows a placeholder that has the same geometry as the content it stands in for, so nothing shifts when data arrives. Placeholders are grey blocks (no icon discs: the icon's space is kept empty) that pulse together (one shared opacity animation between 45% and 95%).
 
 - Lists use SkeletonRows, sized to AssetRow (plain or card variant).
 - Home tiles use SkeletonTiles at the tile width; the balance shows a block until the portfolio loads.
