@@ -28,9 +28,9 @@ export function SessionScreen() {
   const queryClient = useQueryClient();
   const prefetchPages = usePrefetchMobilePages();
   useEffect(() => {
-    prefetchPages("assets", DEFAULT_SEARCH_PARAMS, "0", 10000);
+    if (user) prefetchPages("assets", DEFAULT_SEARCH_PARAMS, "0", 10000);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [user?.id]);
   const [busy, setBusy] = useState(false);
   const [pendingProvider, setPendingProvider] = useState<LoginProvider | null>(null);
   const [committingLogin, setCommittingLogin] = useState(false);
@@ -39,7 +39,6 @@ export function SessionScreen() {
   const attempt = useRef(0);
   const [error, setError] = useState("");
   // Web: a visitor can open the market before making an account.
-  const [browsing, setBrowsing] = useState(false);
   const previousUser = useRef<string | undefined>(undefined);
   const walletCreationAttempt = useRef<string | null>(null);
   const creatingWallet = useRef(false);
@@ -161,12 +160,8 @@ export function SessionScreen() {
         signingOut={busy} sessionError={error} />}
     </AccountSetupTransition>
   );
-  if (browsing) return (
-    <MarketShell address="" onSignOut={async () => undefined} signingOut={false}
-      onRequestSignIn={() => setBrowsing(false)} />
-  );
   return <WelcomeScreen onSignIn={signIn}
-    onBrowse={Platform.OS === "web" ? () => setBrowsing(true) : undefined} pendingProvider={pendingProvider}
+    pendingProvider={pendingProvider}
     setupMessage={configurationError() || undefined} onCancel={cancelLogin}
     canCancel={pendingProvider === "seeker" && !committingLogin} />;
 }

@@ -54,7 +54,7 @@ export async function mobileFetch<T>(
  * a token, its figures and its chart). A visitor who has not signed in yet
  * can browse these; everything else waits for an account.
  */
-export const PUBLIC_RESOURCES = ["assets", "asset", "stats", "candles"];
+export const PUBLIC_RESOURCES: string[] = [];
 const ready = (user: unknown, resource: string) => Boolean(user) || PUBLIC_RESOURCES.includes(resource);
 const isPublic = (resource: string) => PUBLIC_RESOURCES.includes(resource);
 /** The key's user: none for public market data, which is the same for everyone and shared across sign-in states. */
