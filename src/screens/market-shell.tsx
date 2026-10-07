@@ -1014,7 +1014,7 @@ function Home({ active }: { active: boolean }) {
         ) : a.positions.data?.coverage === "partial" ? (
           <Text style={m.label}>Estimated balance</Text>
         ) : null}
-      </LinearGradient>
+      </View>
       {/* Home is the user's own things: what they watch, then what they hold.
           The Best APY and Top Stonks rankings are hidden for now (2026-09-17);
           Search still ranks everything. */}
