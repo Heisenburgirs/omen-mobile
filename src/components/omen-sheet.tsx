@@ -223,7 +223,7 @@ export function OmenDialog({
 }
 const s = StyleSheet.create({
   sheet: {
-    backgroundColor: "#0C1327",
+    backgroundColor: "#0A1020",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     borderTopWidth: 1,

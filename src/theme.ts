@@ -16,17 +16,17 @@ export const tradingColors = {
   card: "#070B19",
   cardLine: "#070B19",
   // Pills, chips and fields that sit on a tile or on the ground.
-  surface: "#0F1629",
-  surfaceRaised: "#151D38",
+  surface: "#0C1222",
+  surfaceRaised: "#11182E",
   /** A selected pill, tab or toggle. */
-  selected: "#1D2749",
+  selected: "#19223F",
   ice: "#FFFFFF",
   // The file's greys: Gray 4 and Gray 3 for secondary text, Gray 2 for an
   // unselected tab or key.
   mist: "#C3C8D6",
   muted: "#97A0BF",
   faint: "#66708F",
-  line: "#19223E",
+  line: "#161E36",
   focus: "#8FA6FF",
   /** The one green: the primary action, and cash. */
   /** The brand's blue (the landing page's), for a selected state or an accent that is not money. */

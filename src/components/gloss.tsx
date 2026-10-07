@@ -27,7 +27,7 @@ export const raised: ViewStyle = {
 };
 /** The quiet (grey) button's edge and fill. Goes after `raised`. */
 export const raisedQuiet: ViewStyle = {
-  backgroundColor: "#121A33",
+  backgroundColor: "#0F162B",
   borderTopWidth: 1,
   borderBottomWidth: 1,
   borderLeftWidth: 1,
