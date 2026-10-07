@@ -150,7 +150,7 @@ export function useMobilePages<T>(
     const seen = new Set<string>();
     const out: T[] = [];
     for (const page of q.data?.pages ?? [])
-      for (const row of page.data) {
+      for (const row of page?.data ?? []) {
         const id = options.id(row);
         if (seen.has(id)) continue;
         seen.add(id);
@@ -162,8 +162,8 @@ export function useMobilePages<T>(
   return {
     rows,
     /** The first page's envelope, for anything that reads beyond the rows. */
-    data: q.data?.pages[0],
-    pageCount: q.data?.pages.length ?? 0,
+    data: q.data?.pages?.[0],
+    pageCount: q.data?.pages?.length ?? 0,
     hasNext: Boolean(q.hasNextPage),
     fetchNext: () => {
       if (q.hasNextPage && !q.isFetchingNextPage) void q.fetchNextPage();

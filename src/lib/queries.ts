@@ -44,6 +44,9 @@ const POLICIES: Record<string, Policy> = {
 const DEFAULT: Policy = { stale: 15_000 };
 export const policyFor = (resource: string): Policy => POLICIES[resource] ?? DEFAULT;
 
+/** Bumped whenever a cached answer's shape changes; the saved cache is dropped on launch. */
+export const CACHE_SCHEMA = "2";
+
 /** What Search shows first (every token by market cap): the splash fetches this before anything else. */
 export const DEFAULT_SEARCH_PARAMS = { scope: "stonk", type: "tokens", q: "", sort: "cap", direction: "desc", filters: "{}" };
 

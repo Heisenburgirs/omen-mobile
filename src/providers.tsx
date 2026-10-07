@@ -7,7 +7,7 @@ import { focusManager, QueryClient } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { createAsyncStoragePersister } from "@tanstack/query-async-storage-persister";
 import { queryStorage } from "./lib/query-storage";
-import { policyFor } from "./lib/queries";
+import { policyFor, CACHE_SCHEMA } from "./lib/queries";
 import Constants from "expo-constants";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { preloadSounds } from "./lib/sound";
@@ -95,7 +95,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
             persister,
             maxAge: 24 * 60 * 60_000,
             // A new app version starts clean, in case a shape changed.
-            buster: String(Constants.expoConfig?.version ?? "0"),
+            buster: String(Constants.expoConfig?.version ?? "0") + ":" + CACHE_SCHEMA,
             dehydrateOptions: {
               shouldDehydrateQuery: (q) =>
                 q.state.status === "success" &&
