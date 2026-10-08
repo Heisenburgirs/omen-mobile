@@ -42,16 +42,10 @@ export function InviteSheet({ visible, onClose }: { visible: boolean; onClose: (
               ) : null}
             </View>
             {point(
-              "Your friend gets " + dollars(rewards.refereeMicro) + " and cheaper trades",
-              dollars(rewards.refereeMicro) +
-                " of free agent credits, and " +
-                Math.round(rewards.feeDiscountBps / 100) +
-                "% off trading fees for a month, when they sign up with your code.",
+              "They get " + dollars(rewards.refereeMicro) + " of agent credits",
+              "And " + Math.round(rewards.feeDiscountBps / 100) + "% off trading fees for a month.",
             )}
-            {point(
-              "You get " + dollars(rewards.referrerMicro) + " for each friend",
-              dollars(rewards.referrerMicro) + " of agent credits each time someone joins with your code. The agent spends credits before your own money.",
-            )}
+            {point("You get " + dollars(rewards.referrerMicro) + " per friend", "In agent credits, every time someone joins with your code.")}
             <View style={{ gap: 10 }}>
               <Button
                 title="Share invite"

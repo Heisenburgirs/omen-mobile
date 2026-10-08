@@ -5,6 +5,7 @@ import {
   Easing,
   KeyboardAvoidingView,
   Modal,
+  PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -44,8 +45,28 @@ export function OmenSheet({
   const [mounted, setMounted] = useState(visible);
   const progress = useRef(new Animated.Value(0)).current;
   const reduced = useRef(false);
-  // How far the sheet travels: a screen's height, so any sheet starts out of sight.
-  const travel = useWindowDimensions().height;
+  // How far the sheet travels: its own height, measured on its first frame
+  // (drawn invisible until then), so it rises exactly from the screen's foot.
+  const screen = useWindowDimensions().height;
+  const [travel, setTravel] = useState<number | null>(null);
+  // A drag on the handle or header moves the sheet with the finger; past a
+  // hundred points, or a quick flick, it closes; otherwise it springs back.
+  const drag = useRef(new Animated.Value(0)).current;
+  const closing = useRef(onClose);
+  closing.current = onClose;
+  const pan = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => g.dy > 6 && Math.abs(g.dy) > Math.abs(g.dx),
+      onPanResponderMove: (_, g) => drag.setValue(Math.max(0, g.dy)),
+      onPanResponderRelease: (_, g) => {
+        if (g.dy > 100 || g.vy > 0.8) {
+          closing.current();
+          Animated.timing(drag, { toValue: 0, duration: 0, useNativeDriver: true }).start();
+        } else Animated.spring(drag, { toValue: 0, useNativeDriver: true, bounciness: 4 }).start();
+      },
+      onPanResponderTerminate: () => Animated.spring(drag, { toValue: 0, useNativeDriver: true }).start(),
+    }),
+  ).current;
   const insets = useSafeAreaInsets();
   useEffect(() => {
     void AccessibilityInfo.isReduceMotionEnabled().then((v) => {
@@ -61,16 +82,23 @@ export function OmenSheet({
   }, []);
   useEffect(() => {
     if (visible) setMounted(true);
+    else if (travel === null) setMounted(false);
+    // Nothing moves until the sheet knows its height.
+    if (travel === null) return;
     const animation = Animated.timing(progress, {
       toValue: visible ? 1 : 0,
       ...transition(visible, reduced.current),
       useNativeDriver: true,
     });
     animation.start(({ finished }) => {
-      if (finished && !visible) setMounted(false);
+      if (finished && !visible) {
+        setMounted(false);
+        setTravel(null);
+        drag.setValue(0);
+      }
     });
     return () => animation.stop();
-  }, [visible, progress]);
+  }, [visible, progress, travel, drag]);
   return (
     <Modal
       visible={mounted}
@@ -105,23 +133,28 @@ export function OmenSheet({
           style={{ flex: 1, justifyContent: "flex-end" }}
         >
           <Animated.View
+            onLayout={(e) => {
+              if (travel === null) setTravel(Math.max(1, Math.round(e.nativeEvent.layout.height)));
+            }}
             style={[
               s.sheet,
               {
                 maxHeight: "92%",
                 paddingBottom: Math.max(insets.bottom, 16),
                 ...(tall ? { height: "88%" } : {}),
+                opacity: travel === null ? 0 : 1,
                 transform: [
                   {
-                    translateY: progress.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [travel, 0],
-                    }),
+                    translateY: Animated.add(
+                      progress.interpolate({ inputRange: [0, 1], outputRange: [travel ?? screen, 0] }),
+                      drag,
+                    ),
                   },
                 ],
               },
             ]}
           >
+            <View {...pan.panHandlers}>
             <View style={s.handle} />
             <View style={s.header}>
               <Text
@@ -138,6 +171,7 @@ export function OmenSheet({
               >
                 <Icon name="close" size={18} color={colors.muted} />
               </Pressable>
+            </View>
             </View>
             {children}
           </Animated.View>

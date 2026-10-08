@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.net.Uri
+import android.os.Build
 import android.util.Base64
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -14,6 +15,16 @@ import java.io.ByteArrayOutputStream
 class OmenWalletsModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("OmenWallets")
+    // Keeps the process alive while the agent works (see OmenWorkService).
+    Function("startWork") { title: String, text: String ->
+      val context = requireNotNull(appContext.reactContext)
+      val intent = Intent(context, OmenWorkService::class.java).putExtra("title", title).putExtra("text", text)
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent) else context.startService(intent)
+    }
+    Function("stopWork") {
+      val context = requireNotNull(appContext.reactContext)
+      context.stopService(Intent(context, OmenWorkService::class.java))
+    }
     AsyncFunction("getInstalledWallets") {
       val context = requireNotNull(appContext.reactContext)
       val pm = context.packageManager

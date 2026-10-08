@@ -58,7 +58,7 @@ test("free credits count in the agent's balance and an invite says what the frie
   const msg = inviteMessage("1234567", { refereeMicro: 5_000_000, referrerMicro: 2_000_000, seekerMicro: 5_000_000, feeDiscountBps: 5000 });
   assert.match(msg, /code 1234567/);
   assert.match(msg, /\$5 of free agent credits/);
-  assert.match(msg, /50% off trading fees/);
+  assert.match(msg, /50% off fees/);
   const tool = toolById("agent_balance")!;
   const ctx = { text: "what is my agent balance", agent: () => ({ state: "none", availableUsdc: 0, depositUsdc: 0, spentUsdc: 0, idleUsdc: 0, creditUsdc: 4.2 }) } as unknown as ToolContext;
   const out = await tool.run(ctx);

@@ -16,5 +16,5 @@ export type AgentCredits = {
 export function inviteMessage(code: string, rewards: AgentCredits["rewards"]): string {
   const dollars = (micro: number) => `$${(micro / 1e6).toFixed(0)}`;
   const off = Math.round(rewards.feeDiscountBps / 100);
-  return `Join me on OMEN: trade Solana tokens that pay dividends, with an agent that researches for you. Use my code ${code} for ${dollars(rewards.refereeMicro)} of free agent credits and ${off}% off trading fees for a month. https://www.getomen.xyz/app`;
+  return `Trade memecoins, stocks and more on Solana with a personal agent that evolves with you. Use my code ${code} for ${dollars(rewards.refereeMicro)} of free agent credits and ${off}% off fees for a month. https://www.getomen.xyz/app`;
 }

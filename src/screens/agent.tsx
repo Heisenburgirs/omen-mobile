@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState, useMemo } from "react";
-import { Animated, Image, Keyboard, Linking, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
+import { Animated, Image, Keyboard, Linking, PermissionsAndroid, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View } from "react-native";
 import { AgentMessage } from "../components/agent-message";
 import { EMPTY_REFS, type MessageRefs } from "../agent/refs";
 import { inviteMessage, type AgentCredits } from "../agent/credits";
@@ -8,6 +8,7 @@ import { Icon, IconButton, m } from "../components/market-ui";
 import { AgentDrawer } from "../components/agent-drawer";
 import { OmenSheet } from "../components/omen-sheet";
 import { InviteSheet } from "../components/invite-sheet";
+import { keepWorking, doneWorking } from "../../modules/omen-wallets";
 import { AgentComposer } from "../components/agent-composer";
 import { AgentFundPanel } from "../components/agent-fund-panel";
 import { usd } from "../domain/market";
@@ -313,6 +314,14 @@ export function AgentScreen({
     }
     setTyping(true);
     setStatus("Thinking");
+    // Android would freeze the app seconds after the user leaves; a working
+    // notification keeps the turn alive until the reply is in. The
+    // notification needs its permission on Android 13+ (asked once).
+    if (Platform.OS === "android") {
+      if (Platform.Version >= 33)
+        await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS).catch(() => undefined);
+      keepWorking("OMEN", "Your agent is working on a reply");
+    }
     try {
       const token = user ? await getAccessToken() : null;
       const ask = () => runTurn({
@@ -373,6 +382,7 @@ export function AgentScreen({
       agentSays(`I couldn't answer that: ${e instanceof Error ? e.message : "something went wrong."}`);
     } finally {
       setTyping(false);
+      doneWorking();
     }
   };
 

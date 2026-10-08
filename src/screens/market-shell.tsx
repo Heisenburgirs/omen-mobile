@@ -7566,45 +7566,6 @@ function Settings() {
           />
         </View>
       </Pressable>
-      {/* One switch for every dividend token: each one held now and each
-          one bought later gets an auto-compound rule; any token can still be
-          set otherwise from its page. Off stops adding rules and leaves the
-          ones there. */}
-      <Pressable
-        accessibilityRole="switch"
-        accessibilityLabel="Auto-compound dividends"
-        accessibilityState={{ checked: Boolean(a.autoCompoundAll) }}
-        onPress={() => a.setAutoCompoundAll(!a.autoCompoundAll)}
-        style={[m.between, { minHeight: 56, gap: 16 }]}
-      >
-        <View style={{ flex: 1, gap: 2 }}>
-          <Text style={[m.text, { fontFamily: fonts.medium }]}>Auto-compound dividends</Text>
-          <Text style={[m.muted, { fontSize: 12, lineHeight: 16 }]}>
-            Every dividend token you hold or buy compounds into itself. Change any token from its page.
-          </Text>
-        </View>
-        <View
-          style={{
-            width: 44,
-            height: 26,
-            borderRadius: 13,
-            padding: 3,
-            borderWidth: 1,
-            borderColor: a.autoCompoundAll ? colors.ice : colors.line,
-            backgroundColor: a.autoCompoundAll ? colors.ice : colors.surfaceRaised,
-            alignItems: a.autoCompoundAll ? "flex-end" : "flex-start",
-          }}
-        >
-          <View
-            style={{
-              width: 18,
-              height: 18,
-              borderRadius: 9,
-              backgroundColor: a.autoCompoundAll ? colors.canvas : colors.muted,
-            }}
-          />
-        </View>
-      </Pressable>
       {/* The referral code: one 48 px pill whatever its state, so
           typing, applying and the redeemed code never move the page. */}
       <View style={{ gap: 8 }}>
