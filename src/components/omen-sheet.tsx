@@ -68,10 +68,8 @@ export function OmenSheet({
     touch.current = null;
     if (!start) return;
     const speed = start.moved / Math.max(1, Date.now() - start.at); // points per ms
-    if (start.moved > 100 || (start.moved > 30 && speed > 0.8)) {
-      closing.current();
-      drag.setValue(0);
-    } else Animated.spring(drag, { toValue: 0, useNativeDriver: true, bounciness: 4 }).start();
+    if (start.moved > 100 || (start.moved > 30 && speed > 0.8)) closing.current();
+    else Animated.spring(drag, { toValue: 0, useNativeDriver: true, bounciness: 4 }).start();
   };
   const insets = useSafeAreaInsets();
   useEffect(() => {
