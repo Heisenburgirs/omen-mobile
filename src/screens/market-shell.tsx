@@ -7017,7 +7017,7 @@ function Receive() {
   const pending = (onramp.data?.data.purchases ?? []).filter((x) => !["paid", "succeeded", "failed", "cancelled", "canceled", "expired"].includes(x.status));
   // The card is as wide as the page, so the QR's size is known before the
   // first frame; nothing appears a beat late and shifts the content.
-  const qrWidth = useWindowDimensions().width - 2 * space.edge;
+  const qrWidth = Math.round(((useWindowDimensions().width - 2 * space.edge) * 2) / 3);
   const p: Portfolio | undefined = a.positions.data?.data;
   // The deposit goes to the wallet the app is on: the one chosen in the
   // switcher, else Main. The address shown, copied and encoded follows.
@@ -7083,46 +7083,34 @@ function Receive() {
       ) : (
         <>
       <Text style={m.muted}>Send any Solana asset to this address.</Text>
-      <View
-        style={{
-          width: "100%",
-          alignItems: "center",
-          padding: qrPadding,
-          backgroundColor: "#FFFFFF",
-          borderRadius: radius.panel,
-        }}
-      >
-        <QRCode
-          data={address}
-          version={4}
-          errorCorrectionLevel="M"
-          pieceSize={pieceSize}
-        />
-      </View>
-      <View style={[m.panel, { gap: 6 }]}>
-        <View style={m.between}>
-          <Text style={m.label}>Address</Text>
-          <Text style={m.label}>Solana</Text>
-        </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={copied ? "Address copied" : "Copy address"}
-          onPress={copy}
-          style={({ pressed }) => [
-            m.between,
-            { minHeight: 40, opacity: pressed ? 0.5 : 1 },
-          ]}
+      <View style={{ alignItems: "center" }}>
+        <View
+          style={{
+            width: qrWidth,
+            alignItems: "center",
+            padding: qrPadding,
+            backgroundColor: "#FFFFFF",
+            borderRadius: radius.panel,
+          }}
         >
-          <Text
-            style={[m.text, { fontSize: 15, fontFamily: fonts.numericMedium }]}
-          >
-            {shortAddress(address)}
-          </Text>
-          <Text style={[m.link, copied && { color: colors.success }]}>
-            {copied ? "Copied" : "⧉"}
-          </Text>
-        </Pressable>
+          <QRCode
+            data={address}
+            version={4}
+            errorCorrectionLevel="M"
+            pieceSize={pieceSize}
+          />
+        </View>
       </View>
+      <View style={{ gap: 6 }}>
+        <Text style={m.label}>Solana address</Text>
+        <Text
+          selectable
+          style={[m.text, { fontSize: 15, lineHeight: 22, fontFamily: fonts.numericMedium }]}
+        >
+          {address}
+        </Text>
+      </View>
+      <Button title={copied ? "Copied" : "Copy wallet address"} onPress={copy} />
         </>
       )}
       <View style={{ gap: 4 }}>
