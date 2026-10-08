@@ -6991,10 +6991,12 @@ function Receive() {
   // Two ways in: a card (Google Pay, Apple Pay or a card number, through
   // Mercuryo in a browser tab: wallet pays do not work inside a WebView)
   // or crypto sent to the address.
-  const [way, setWay] = useState<"card" | "crypto">("card");
+  // Card deposits are hidden until the card partner is live (2026-10-08).
+  const CARD_DEPOSITS = false;
+  const [way, setWay] = useState<"card" | "crypto">(CARD_DEPOSITS ? "card" : "crypto");
   const [cardUsd, setCardUsd] = useState(50);
   const [funding, setFunding] = useState(false);
-  const onramp = useMobile<{ available: boolean; purchases: { id: string; usd: number; status: string; created_at: string }[] }>("onramp", {}, !a.guest);
+  const onramp = useMobile<{ available: boolean; purchases: { id: string; usd: number; status: string; created_at: string }[] }>("onramp", {}, !a.guest && CARD_DEPOSITS);
   const buyWithCard = async () => {
     if (funding) return;
     setFunding(true);
@@ -7052,7 +7054,9 @@ function Receive() {
     };
   return (
     <Page compact onEndReached={loadMore}>
-      <TextTabs items={["Card", "Crypto"]} value={way === "card" ? "Card" : "Crypto"} onChange={(v) => setWay(v === "Card" ? "card" : "crypto")} />
+      {CARD_DEPOSITS ? (
+        <TextTabs items={["Card", "Crypto"]} value={way === "card" ? "Card" : "Crypto"} onChange={(v) => setWay(v === "Card" ? "card" : "crypto")} />
+      ) : null}
       {way === "card" ? (
         <View style={{ gap: 16 }}>
           <Text style={m.muted}>Google Pay, Apple Pay or a card. Arrives as cash in a few minutes.</Text>
