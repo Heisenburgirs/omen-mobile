@@ -5,7 +5,6 @@ import {
   Easing,
   KeyboardAvoidingView,
   Modal,
-  PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -54,22 +53,26 @@ export function OmenSheet({
   const drag = useRef(new Animated.Value(0)).current;
   const closing = useRef(onClose);
   closing.current = onClose;
-  const pan = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_, g) => g.dy > 6 && Math.abs(g.dy) > Math.abs(g.dx),
-      onMoveShouldSetPanResponderCapture: (_, g) => g.dy > 6 && Math.abs(g.dy) > Math.abs(g.dx),
-      onPanResponderTerminationRequest: () => false,
-      onPanResponderMove: (_, g) => drag.setValue(Math.max(0, g.dy)),
-      onPanResponderRelease: (_, g) => {
-        if (g.dy > 100 || g.vy > 0.8) {
-          closing.current();
-          Animated.timing(drag, { toValue: 0, duration: 0, useNativeDriver: true }).start();
-        } else Animated.spring(drag, { toValue: 0, useNativeDriver: true, bounciness: 4 }).start();
-      },
-      onPanResponderTerminate: () => Animated.spring(drag, { toValue: 0, useNativeDriver: true }).start(),
-    }),
-  ).current;
+  const touch = useRef<{ y: number; at: number; moved: number } | null>(null);
+  const dragStart = (y: number) => {
+    touch.current = { y, at: Date.now(), moved: 0 };
+  };
+  const dragMove = (y: number) => {
+    const start = touch.current;
+    if (!start) return;
+    start.moved = Math.max(0, y - start.y);
+    drag.setValue(start.moved);
+  };
+  const dragEnd = () => {
+    const start = touch.current;
+    touch.current = null;
+    if (!start) return;
+    const speed = start.moved / Math.max(1, Date.now() - start.at); // points per ms
+    if (start.moved > 100 || (start.moved > 30 && speed > 0.8)) {
+      closing.current();
+      drag.setValue(0);
+    } else Animated.spring(drag, { toValue: 0, useNativeDriver: true, bounciness: 4 }).start();
+  };
   const insets = useSafeAreaInsets();
   useEffect(() => {
     void AccessibilityInfo.isReduceMotionEnabled().then((v) => {
@@ -157,7 +160,13 @@ export function OmenSheet({
               },
             ]}
           >
-            <View collapsable={false} {...pan.panHandlers}>
+            <View
+              collapsable={false}
+              onTouchStart={(e) => dragStart(e.nativeEvent.pageY)}
+              onTouchMove={(e) => dragMove(e.nativeEvent.pageY)}
+              onTouchEnd={dragEnd}
+              onTouchCancel={dragEnd}
+            >
             <View style={s.handle} />
             <View style={s.header}>
               <Text
