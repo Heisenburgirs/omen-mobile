@@ -85,3 +85,7 @@ powershell -File scripts/release.ps1 -BuildNumber <n>
 - [docs/ONBOARDING.md](docs/ONBOARDING.md), [docs/LOADING.md](docs/LOADING.md)
 - [brand.md](brand.md): colours and type
 - [AGENTS.md](AGENTS.md): notes for coding agents working in this repo
+
+## License
+
+[MIT](LICENSE).
