@@ -62,7 +62,6 @@ export function OmenSheet({
       onPanResponderTerminationRequest: () => false,
       onPanResponderMove: (_, g) => drag.setValue(Math.max(0, g.dy)),
       onPanResponderRelease: (_, g) => {
-        console.log("[sheet] drag release", Math.round(g.dy), g.vy.toFixed(2));
         if (g.dy > 100 || g.vy > 0.8) {
           closing.current();
           Animated.timing(drag, { toValue: 0, duration: 0, useNativeDriver: true }).start();
@@ -158,7 +157,7 @@ export function OmenSheet({
               },
             ]}
           >
-            <View {...pan.panHandlers}>
+            <View collapsable={false} {...pan.panHandlers}>
             <View style={s.handle} />
             <View style={s.header}>
               <Text
