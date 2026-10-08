@@ -56,9 +56,13 @@ export function OmenSheet({
   closing.current = onClose;
   const pan = useRef(
     PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (_, g) => g.dy > 6 && Math.abs(g.dy) > Math.abs(g.dx),
+      onMoveShouldSetPanResponderCapture: (_, g) => g.dy > 6 && Math.abs(g.dy) > Math.abs(g.dx),
+      onPanResponderTerminationRequest: () => false,
       onPanResponderMove: (_, g) => drag.setValue(Math.max(0, g.dy)),
       onPanResponderRelease: (_, g) => {
+        console.log("[sheet] drag release", Math.round(g.dy), g.vy.toFixed(2));
         if (g.dy > 100 || g.vy > 0.8) {
           closing.current();
           Animated.timing(drag, { toValue: 0, duration: 0, useNativeDriver: true }).start();
